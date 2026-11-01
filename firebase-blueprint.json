@@ -1,0 +1,454 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User account and profile information",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique user ID matching Firebase Auth UID",
+          "maxLength": 128
+        },
+        "email": {
+          "type": "string",
+          "description": "User email address",
+          "maxLength": 256
+        },
+        "displayName": {
+          "type": "string",
+          "description": "User full name or display handle",
+          "maxLength": 100
+        },
+        "photoURL": {
+          "type": "string",
+          "description": "Avatar URL",
+          "maxLength": 512
+        },
+        "role": {
+          "type": "string",
+          "description": "User role in the system",
+          "enum": ["student", "educator", "teacher", "admin"],
+          "maxLength": 30
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Account creation ISO timestamp or server timestamp"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "Account update ISO timestamp or server timestamp"
+        }
+      },
+      "required": ["id", "email", "displayName"]
+    },
+    "Project": {
+      "title": "Project",
+      "description": "A whiteboard project notebook belonging to a user",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique project identifier",
+          "maxLength": 128
+        },
+        "ownerId": {
+          "type": "string",
+          "description": "Firebase Auth UID of the project owner",
+          "maxLength": 128
+        },
+        "title": {
+          "type": "string",
+          "description": "Project title",
+          "maxLength": 120
+        },
+        "description": {
+          "type": "string",
+          "description": "Brief description of the whiteboard project",
+          "maxLength": 500
+        },
+        "subject": {
+          "type": "string",
+          "description": "Educational subject domain",
+          "maxLength": 50
+        },
+        "template": {
+          "type": "string",
+          "description": "Default board template (e.g. blank, grid, dot, blueprint, lined)",
+          "maxLength": 50
+        },
+        "tags": {
+          "type": "array",
+          "description": "Tags associated with the project"
+        },
+        "isStarred": {
+          "type": "boolean",
+          "description": "Whether project is starred by owner"
+        },
+        "version": {
+          "type": "number",
+          "description": "Revision number for history and conflict resolution"
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Creation timestamp"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "Last updated timestamp"
+        }
+      },
+      "required": ["id", "ownerId", "title", "subject"]
+    },
+    "Board": {
+      "title": "Board",
+      "description": "An individual whiteboard page containing structured vector stroke data",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique board page identifier",
+          "maxLength": 128
+        },
+        "projectId": {
+          "type": "string",
+          "description": "Parent project identifier",
+          "maxLength": 128
+        },
+        "ownerId": {
+          "type": "string",
+          "description": "Firebase Auth UID of the board owner",
+          "maxLength": 128
+        },
+        "pageNumber": {
+          "type": "number",
+          "description": "Index or sequence order of this page"
+        },
+        "title": {
+          "type": "string",
+          "description": "Page title",
+          "maxLength": 100
+        },
+        "background": {
+          "type": "string",
+          "description": "Background grid style (blank, grid, dot, blueprint, lined)",
+          "maxLength": 30
+        },
+        "strokes": {
+          "type": "array",
+          "description": "Vector stroke data array containing point coordinates, colors, widths, and shapes"
+        },
+        "thumbnail": {
+          "type": "string",
+          "description": "Optional low-resolution thumbnail preview data URL or storage URL",
+          "maxLength": 65536
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "Last updated timestamp"
+        }
+      },
+      "required": ["id", "projectId", "ownerId", "title", "background"]
+    },
+    "AISession": {
+      "title": "AISession",
+      "description": "Log of Gemini AI educational intelligence requests, math solutions, and handwriting transcriptions",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique session ID",
+          "maxLength": 128
+        },
+        "ownerId": {
+          "type": "string",
+          "description": "Firebase Auth UID of the user who initiated the request",
+          "maxLength": 128
+        },
+        "projectId": {
+          "type": "string",
+          "description": "Associated project ID if applicable",
+          "maxLength": 128
+        },
+        "task": {
+          "type": "string",
+          "description": "Task type (handwriting, math, diagram, study_summary, quiz, flashcards, lesson_plan, explain, ask)",
+          "maxLength": 50
+        },
+        "prompt": {
+          "type": "string",
+          "description": "User prompt or recognized equation",
+          "maxLength": 2000
+        },
+        "summary": {
+          "type": "string",
+          "description": "Response summary or transcription",
+          "maxLength": 10000
+        },
+        "confidence": {
+          "type": "number",
+          "description": "Confidence score calculated by model"
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Request creation timestamp"
+        }
+      },
+      "required": ["id", "ownerId", "task"]
+    },
+    "UserPreferences": {
+      "title": "UserPreferences",
+      "description": "User configuration, gesture calibration parameters, and UI settings",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "User preferences identifier matching user UID",
+          "maxLength": 128
+        },
+        "ownerId": {
+          "type": "string",
+          "description": "Firebase Auth UID of the user",
+          "maxLength": 128
+        },
+        "theme": {
+          "type": "string",
+          "description": "UI theme (dark, light, high-contrast)",
+          "maxLength": 30
+        },
+        "handTrackingSensitivity": {
+          "type": "number",
+          "description": "Sensitivity multiplier for gesture tracking"
+        },
+        "pinchThreshold": {
+          "type": "number",
+          "description": "Calibrated pinch distance for air-drawing"
+        },
+        "strokeSmoothing": {
+          "type": "number",
+          "description": "Smoothing weight (1 Euro filter fc_min / beta)"
+        },
+        "autoSaveDelayMs": {
+          "type": "number",
+          "description": "Debounce delay for cloud auto-saving"
+        },
+        "defaultSubject": {
+          "type": "string",
+          "description": "Default educational subject",
+          "maxLength": 50
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "Last updated timestamp"
+        }
+      },
+      "required": ["id", "ownerId"]
+    },
+    "Classroom": {
+      "title": "Classroom",
+      "description": "An interactive digital classroom space connecting Teachers and Students",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique classroom identifier",
+          "maxLength": 128
+        },
+        "code": {
+          "type": "string",
+          "description": "Unique 6-character alphanumeric join code",
+          "maxLength": 10
+        },
+        "name": {
+          "type": "string",
+          "description": "Classroom name",
+          "maxLength": 120
+        },
+        "subject": {
+          "type": "string",
+          "description": "Educational subject domain",
+          "maxLength": 50
+        },
+        "description": {
+          "type": "string",
+          "description": "Classroom description and objectives",
+          "maxLength": 500
+        },
+        "teacherId": {
+          "type": "string",
+          "description": "Firebase Auth UID of the teacher / owner",
+          "maxLength": 128
+        },
+        "teacherName": {
+          "type": "string",
+          "description": "Display name of the teacher",
+          "maxLength": 100
+        },
+        "activeBoardId": {
+          "type": "string",
+          "description": "ID of currently presented or shared whiteboard",
+          "maxLength": 128
+        },
+        "activeSlideIndex": {
+          "type": "number",
+          "description": "Current active slide index for synchronized presentation"
+        },
+        "isLiveSession": {
+          "type": "boolean",
+          "description": "Whether teacher is actively presenting live"
+        },
+        "allowStudentDraw": {
+          "type": "boolean",
+          "description": "Whether students are permitted to collaborate on live board or view-only"
+        },
+        "members": {
+          "type": "array",
+          "description": "Enrolled classroom students and participants with role and presence"
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Classroom creation timestamp"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "Last updated timestamp"
+        }
+      },
+      "required": ["id", "code", "name", "subject", "teacherId", "teacherName"]
+    },
+    "ClassroomMaterial": {
+      "title": "ClassroomMaterial",
+      "description": "Shared lesson boards, revision notes, and quizzes posted to the classroom",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique material identifier",
+          "maxLength": 128
+        },
+        "classroomId": {
+          "type": "string",
+          "description": "Parent classroom identifier",
+          "maxLength": 128
+        },
+        "teacherId": {
+          "type": "string",
+          "description": "Firebase Auth UID of the teacher creator",
+          "maxLength": 128
+        },
+        "type": {
+          "type": "string",
+          "description": "Material category (whiteboard, lesson_notes, quiz, flashcards)",
+          "enum": ["whiteboard", "lesson_notes", "quiz", "flashcards"],
+          "maxLength": 30
+        },
+        "title": {
+          "type": "string",
+          "description": "Material title",
+          "maxLength": 120
+        },
+        "description": {
+          "type": "string",
+          "description": "Brief description of material",
+          "maxLength": 500
+        },
+        "content": {
+          "type": "object",
+          "description": "Structured content (board vector strokes, quiz questions, or study notes)"
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Material creation timestamp"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "Material update timestamp"
+        }
+      },
+      "required": ["id", "classroomId", "teacherId", "type", "title"]
+    },
+    "ClassroomQuizSubmission": {
+      "title": "ClassroomQuizSubmission",
+      "description": "Completed student quiz submission and diagnostic score record",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique submission identifier",
+          "maxLength": 128
+        },
+        "classroomId": {
+          "type": "string",
+          "description": "Classroom identifier",
+          "maxLength": 128
+        },
+        "quizMaterialId": {
+          "type": "string",
+          "description": "Quiz material identifier",
+          "maxLength": 128
+        },
+        "studentId": {
+          "type": "string",
+          "description": "Firebase Auth UID of the student",
+          "maxLength": 128
+        },
+        "studentName": {
+          "type": "string",
+          "description": "Name of the student",
+          "maxLength": 100
+        },
+        "score": {
+          "type": "number",
+          "description": "Number of correct answers"
+        },
+        "totalQuestions": {
+          "type": "number",
+          "description": "Total number of questions in quiz"
+        },
+        "answers": {
+          "type": "array",
+          "description": "Selected answers list"
+        },
+        "submittedAt": {
+          "type": "string",
+          "description": "Submission timestamp"
+        }
+      },
+      "required": ["id", "classroomId", "quizMaterialId", "studentId", "studentName", "score"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "Private user account profile"
+    },
+    "/projects/{projectId}": {
+      "schema": "Project",
+      "description": "User's whiteboard projects with private ownership"
+    },
+    "/boards/{boardId}": {
+      "schema": "Board",
+      "description": "Structured vector whiteboard pages and stroke collections"
+    },
+    "/ai_sessions/{sessionId}": {
+      "schema": "AISession",
+      "description": "History of AI tutor, math solver, and OCR sessions"
+    },
+    "/user_preferences/{userId}": {
+      "schema": "UserPreferences",
+      "description": "User gesture calibration and app settings"
+    },
+    "/classrooms/{classroomId}": {
+      "schema": "Classroom",
+      "description": "Interactive classroom workspace connecting teachers and students"
+    },
+    "/classrooms/{classroomId}/materials/{materialId}": {
+      "schema": "ClassroomMaterial",
+      "description": "Shared lesson boards, Cornell notes, and quizzes posted to classroom"
+    },
+    "/classrooms/{classroomId}/submissions/{submissionId}": {
+      "schema": "ClassroomQuizSubmission",
+      "description": "Student completed quiz assessments and scores"
+    }
+  }
+}

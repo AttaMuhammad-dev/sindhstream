@@ -1,0 +1,199 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Default Deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // --- Users Collection ---
+    function isValidUser(data) {
+      return data.keys().hasAll(['id', 'email', 'displayName']) &&
+             data.keys().hasOnly(['id', 'email', 'displayName', 'photoURL', 'role', 'createdAt', 'updatedAt']) &&
+             data.id is string && data.id == request.auth.uid &&
+             data.email is string && data.email.size() <= 256 &&
+             data.displayName is string && data.displayName.size() <= 100 &&
+             (!('photoURL' in data) || (data.photoURL is string && data.photoURL.size() <= 512)) &&
+             (!('role' in data) || (data.role in ['student', 'educator', 'teacher', 'admin']));
+    }
+
+    match /users/{userId} {
+      allow get: if isOwner(userId) && isValidId(userId);
+      allow list: if false;
+      allow create: if isOwner(userId) && isValidId(userId) && isValidUser(incoming());
+      allow update: if isOwner(userId) && isValidId(userId) && isValidUser(incoming()) &&
+                    incoming().id == existing().id &&
+                    incoming().email == existing().email;
+      allow delete: if isOwner(userId) && isValidId(userId);
+    }
+
+    // --- Projects Collection ---
+    function isValidProject(data) {
+      return data.keys().hasAll(['id', 'ownerId', 'title', 'subject']) &&
+             data.keys().hasOnly(['id', 'ownerId', 'title', 'description', 'subject', 'template', 'tags', 'isStarred', 'version', 'createdAt', 'updatedAt']) &&
+             data.id is string && isValidId(data.id) &&
+             data.ownerId is string && data.ownerId == request.auth.uid &&
+             data.title is string && data.title.size() > 0 && data.title.size() <= 120 &&
+             data.subject is string && data.subject.size() <= 50 &&
+             (!('description' in data) || (data.description is string && data.description.size() <= 500)) &&
+             (!('template' in data) || (data.template is string && data.template.size() <= 50)) &&
+             (!('tags' in data) || (data.tags is list && data.tags.size() <= 20)) &&
+             (!('isStarred' in data) || data.isStarred is bool) &&
+             (!('version' in data) || data.version is number);
+    }
+
+    match /projects/{projectId} {
+      allow get: if isSignedIn() && isValidId(projectId) && existing().ownerId == request.auth.uid;
+      allow list: if isSignedIn() && resource.data.ownerId == request.auth.uid;
+      allow create: if isSignedIn() && isValidId(projectId) && isValidProject(incoming());
+      allow update: if isSignedIn() && isValidId(projectId) && isValidProject(incoming()) &&
+                    existing().ownerId == request.auth.uid &&
+                    incoming().ownerId == existing().ownerId &&
+                    incoming().id == existing().id;
+      allow delete: if isSignedIn() && isValidId(projectId) && existing().ownerId == request.auth.uid;
+    }
+
+    // --- Boards Collection ---
+    function isValidBoard(data) {
+      return data.keys().hasAll(['id', 'projectId', 'ownerId', 'title', 'background']) &&
+             data.keys().hasOnly(['id', 'projectId', 'ownerId', 'pageNumber', 'title', 'background', 'strokes', 'thumbnail', 'updatedAt']) &&
+             data.id is string && isValidId(data.id) &&
+             data.projectId is string && isValidId(data.projectId) &&
+             data.ownerId is string && data.ownerId == request.auth.uid &&
+             data.title is string && data.title.size() <= 100 &&
+             data.background is string && data.background.size() <= 30 &&
+             (!('pageNumber' in data) || data.pageNumber is number) &&
+             (!('strokes' in data) || (data.strokes is list && data.strokes.size() <= 10000)) &&
+             (!('thumbnail' in data) || (data.thumbnail is string && data.thumbnail.size() <= 65536));
+    }
+
+    match /boards/{boardId} {
+      allow get: if isSignedIn() && isValidId(boardId) && existing().ownerId == request.auth.uid;
+      allow list: if isSignedIn() && resource.data.ownerId == request.auth.uid;
+      allow create: if isSignedIn() && isValidId(boardId) && isValidBoard(incoming()) &&
+                    exists(/databases/$(database)/documents/projects/$(incoming().projectId)) &&
+                    get(/databases/$(database)/documents/projects/$(incoming().projectId)).data.ownerId == request.auth.uid;
+      allow update: if isSignedIn() && isValidId(boardId) && isValidBoard(incoming()) &&
+                    existing().ownerId == request.auth.uid &&
+                    incoming().ownerId == existing().ownerId &&
+                    incoming().projectId == existing().projectId;
+      allow delete: if isSignedIn() && isValidId(boardId) && existing().ownerId == request.auth.uid;
+    }
+
+    // --- AI Sessions Collection ---
+    function isValidAISession(data) {
+      return data.keys().hasAll(['id', 'ownerId', 'task']) &&
+             data.keys().hasOnly(['id', 'ownerId', 'projectId', 'task', 'prompt', 'summary', 'confidence', 'createdAt']) &&
+             data.id is string && isValidId(data.id) &&
+             data.ownerId is string && data.ownerId == request.auth.uid &&
+             data.task is string && data.task.size() <= 50 &&
+             (!('projectId' in data) || (data.projectId is string && isValidId(data.projectId))) &&
+             (!('prompt' in data) || (data.prompt is string && data.prompt.size() <= 2000)) &&
+             (!('summary' in data) || (data.summary is string && data.summary.size() <= 10000)) &&
+             (!('confidence' in data) || data.confidence is number);
+    }
+
+    match /ai_sessions/{sessionId} {
+      allow get: if isSignedIn() && isValidId(sessionId) && existing().ownerId == request.auth.uid;
+      allow list: if isSignedIn() && resource.data.ownerId == request.auth.uid;
+      allow create: if isSignedIn() && isValidId(sessionId) && isValidAISession(incoming());
+      allow update: if false;
+      allow delete: if isSignedIn() && isValidId(sessionId) && existing().ownerId == request.auth.uid;
+    }
+
+    // --- User Preferences Collection ---
+    function isValidPreferences(data) {
+      return data.keys().hasAll(['id', 'ownerId']) &&
+             data.keys().hasOnly(['id', 'ownerId', 'theme', 'handTrackingSensitivity', 'pinchThreshold', 'strokeSmoothing', 'autoSaveDelayMs', 'defaultSubject', 'updatedAt']) &&
+             data.id is string && data.id == request.auth.uid &&
+             data.ownerId is string && data.ownerId == request.auth.uid &&
+             (!('theme' in data) || (data.theme is string && data.theme.size() <= 30)) &&
+             (!('handTrackingSensitivity' in data) || data.handTrackingSensitivity is number) &&
+             (!('pinchThreshold' in data) || data.pinchThreshold is number) &&
+             (!('strokeSmoothing' in data) || data.strokeSmoothing is number) &&
+             (!('autoSaveDelayMs' in data) || data.autoSaveDelayMs is number) &&
+             (!('defaultSubject' in data) || (data.defaultSubject is string && data.defaultSubject.size() <= 50));
+    }
+
+    match /user_preferences/{userId} {
+      allow get: if isOwner(userId) && isValidId(userId);
+      allow list: if false;
+      allow create: if isOwner(userId) && isValidId(userId) && isValidPreferences(incoming());
+      allow update: if isOwner(userId) && isValidId(userId) && isValidPreferences(incoming()) &&
+                    incoming().id == existing().id &&
+                    incoming().ownerId == existing().ownerId;
+      allow delete: if isOwner(userId) && isValidId(userId);
+    }
+
+    // --- Classroom Collection ---
+    function isValidClassroom(data) {
+      return data.keys().hasAll(['id', 'code', 'name', 'subject', 'teacherId', 'teacherName']) &&
+             data.keys().hasOnly(['id', 'code', 'name', 'subject', 'description', 'teacherId', 'teacherName', 'activeBoardId', 'activeSlideIndex', 'isLiveSession', 'allowStudentDraw', 'members', 'createdAt', 'updatedAt']) &&
+             data.id is string && isValidId(data.id) &&
+             data.code is string && data.code.size() <= 10 &&
+             data.name is string && data.name.size() > 0 && data.name.size() <= 120 &&
+             data.subject is string && data.subject.size() <= 50 &&
+             data.teacherId is string && data.teacherId.size() <= 128 &&
+             data.teacherName is string && data.teacherName.size() <= 100 &&
+             (!('description' in data) || (data.description is string && data.description.size() <= 500)) &&
+             (!('activeBoardId' in data) || (data.activeBoardId is string && isValidId(data.activeBoardId))) &&
+             (!('activeSlideIndex' in data) || data.activeSlideIndex is number) &&
+             (!('isLiveSession' in data) || data.isLiveSession is bool) &&
+             (!('allowStudentDraw' in data) || data.allowStudentDraw is bool) &&
+             (!('members' in data) || (data.members is list && data.members.size() <= 100));
+    }
+
+    match /classrooms/{classroomId} {
+      allow get: if isSignedIn() && isValidId(classroomId);
+      allow list: if isSignedIn();
+      allow create: if isSignedIn() && isValidId(classroomId) && isValidClassroom(incoming()) && incoming().teacherId == request.auth.uid;
+      allow update: if isSignedIn() && isValidId(classroomId) && isValidClassroom(incoming()) && (
+        // Teacher can update any field
+        existing().teacherId == request.auth.uid ||
+        // Students can update members list to join/leave or update presence
+        incoming().diff(existing()).affectedKeys().hasOnly(['members', 'updatedAt'])
+      );
+      allow delete: if isSignedIn() && isValidId(classroomId) && existing().teacherId == request.auth.uid;
+
+      // --- Subcollection: Classroom Materials ---
+      match /materials/{materialId} {
+        allow get, list: if isSignedIn() && isValidId(materialId);
+        allow create, update: if isSignedIn() && isValidId(materialId) &&
+          get(/databases/$(database)/documents/classrooms/$(classroomId)).data.teacherId == request.auth.uid;
+        allow delete: if isSignedIn() && isValidId(materialId) &&
+          get(/databases/$(database)/documents/classrooms/$(classroomId)).data.teacherId == request.auth.uid;
+      }
+
+      // --- Subcollection: Classroom Submissions ---
+      match /submissions/{submissionId} {
+        allow get, list: if isSignedIn() && isValidId(submissionId) && (
+          resource.data.studentId == request.auth.uid ||
+          get(/databases/$(database)/documents/classrooms/$(classroomId)).data.teacherId == request.auth.uid
+        );
+        allow create: if isSignedIn() && isValidId(submissionId) && incoming().studentId == request.auth.uid;
+        allow update, delete: if isSignedIn() && isValidId(submissionId) &&
+          get(/databases/$(database)/documents/classrooms/$(classroomId)).data.teacherId == request.auth.uid;
+      }
+    }
+  }
+}
