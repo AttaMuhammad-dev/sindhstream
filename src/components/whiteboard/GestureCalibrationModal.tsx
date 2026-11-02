@@ -20,16 +20,16 @@ const GESTURE_GUIDES = [
   },
   {
     id: 'pointing',
-    title: 'Index Extended (Aim / Hover)',
+    title: 'Single Index Finger (Laser)',
     gestureKey: 'pointing',
-    instruction: 'Extend your index finger while keeping other fingers relaxed to reposition the air pointer without marking.',
+    instruction: 'Extend only your index finger. Move the visible laser dot around the board without drawing.',
     shortcutBadge: 'Single Index Finger',
   },
   {
     id: 'open_palm',
-    title: 'Open Palm (Pause / Pan)',
+    title: 'Open Palm (Drag the Board)',
     gestureKey: 'open_palm',
-    instruction: 'Show all 5 open fingers facing the camera to pause tracking, prevent accidental strokes, or pan.',
+    instruction: 'Show all 5 fingers open, then move your hand to drag the board. Release the open palm to stop panning.',
     shortcutBadge: '5 Open Fingers',
   },
   {
@@ -220,6 +220,7 @@ export const GestureCalibrationModal: React.FC<GestureCalibrationModalProps> = (
                 className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-cyan-300 text-xs"
               >
                 <option value="pause">Pause / Freeze</option>
+                <option value="pan">Drag / Pan Board</option>
                 <option value="erase_select">Erase / Select</option>
                 <option value="clear_board">Clear Board</option>
                 <option value="aim_hover">Aim Hover</option>
@@ -233,9 +234,9 @@ export const GestureCalibrationModal: React.FC<GestureCalibrationModalProps> = (
                 onChange={(e) => handleUpdateBinding('closedFistAction', e.target.value as GestureAction)}
                 className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-cyan-300 text-xs"
               >
+                <option value="pause">Pause</option>
                 <option value="laser_presentation">Laser Pointer</option>
                 <option value="clear_board">Clear Canvas</option>
-                <option value="pause">Pause</option>
               </select>
             </div>
 

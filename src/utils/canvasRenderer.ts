@@ -155,7 +155,7 @@ export function drawStrokeOnCanvas(
   if (tool === 'eraser') {
     ctx.globalCompositeOperation = 'destination-out';
     ctx.strokeStyle = 'rgba(0,0,0,1)';
-    ctx.lineWidth = size * 2.5;
+    ctx.lineWidth = size * 4;
   } else if (tool === 'highlighter') {
     ctx.globalCompositeOperation = 'source-over';
     ctx.strokeStyle = color;

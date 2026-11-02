@@ -8,8 +8,10 @@ import {
   WhiteboardPage,
   BackgroundStyle,
 } from '../../types';
-import { exportStrokesToSvg, exportWhiteboardToPdf } from '../../utils/canvasRenderer';
+import { drawStrokeOnCanvas, exportStrokesToSvg, exportWhiteboardToPdf } from '../../utils/canvasRenderer';
+import { getStrokeBoundingBox } from '../../utils/coordinateTransforms';
 import { handTracker } from '../../services/handTrackingService';
+import { recognizeHandwritingFromCanvas } from '../../services/aiEducationalService';
 import { WhiteboardCanvas } from './WhiteboardCanvas';
 import { WebcamHUD } from './WebcamHUD';
 import { AIAssistantDrawer } from './AIAssistantDrawer';
@@ -87,6 +89,7 @@ export const WhiteboardWorkspace: React.FC<WhiteboardWorkspaceProps> = ({
 
   // Tool states
   const [selectedTool, setSelectedTool] = useState<DrawingTool>('pen');
+  const lastInkToolRef = useRef<DrawingTool>('pen');
   const [selectedColor, setSelectedColor] = useState('#38BDF8');
   const [brushSize, setBrushSize] = useState(4);
   const [autoShapeRecognition, setAutoShapeRecognition] = useState(true);
@@ -112,6 +115,12 @@ export const WhiteboardWorkspace: React.FC<WhiteboardWorkspaceProps> = ({
   const [saveToast, setSaveToast] = useState(false);
   const [isExportingPdf, setIsExportingPdf] = useState(false);
   const [gestureFeedback, setGestureFeedback] = useState<string | null>(null);
+  const [smartInkStatus, setSmartInkStatus] = useState<string | null>(null);
+  const handledSmartInkIdsRef = useRef(new Set<string>());
+  const activePageIdRef = useRef(activePage.id);
+  const activeStrokesRef = useRef(activePage.strokes);
+  activePageIdRef.current = activePage.id;
+  activeStrokesRef.current = activePage.strokes;
   const gestureFeedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [isToolbarCollapsed, setIsToolbarCollapsed] = useState(false);
 
@@ -123,15 +132,22 @@ export const WhiteboardWorkspace: React.FC<WhiteboardWorkspaceProps> = ({
     const updateSize = () => {
       if (containerRef.current) {
         const { clientWidth, clientHeight } = containerRef.current;
-        setDimensions({
-          width: Math.max(800, clientWidth),
-          height: Math.max(600, clientHeight),
-        });
+        const width = Math.max(800, clientWidth);
+        const height = Math.max(600, clientHeight);
+        setDimensions({ width, height });
+        handTracker.updateCanvasDimensions(width, height);
       }
     };
     updateSize();
     window.addEventListener('resize', updateSize);
-    return () => window.removeEventListener('resize', updateSize);
+    const observer = typeof ResizeObserver === 'undefined'
+      ? null
+      : new ResizeObserver(updateSize);
+    if (containerRef.current) observer?.observe(containerRef.current);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener('resize', updateSize);
+    };
   }, []);
 
   // Update Viewport transform handler
@@ -204,12 +220,14 @@ export const WhiteboardWorkspace: React.FC<WhiteboardWorkspaceProps> = ({
   // destructive/page action every frame. Continuous actions stay in the engine.
   const lastActionKeyRef = useRef('none');
   const lastGestureActionTimeRef = useRef(Number.NEGATIVE_INFINITY);
+  const pendingGestureActionRef = useRef<{ key: string; since: number } | null>(null);
 
   useEffect(() => {
     const gesture = trackingState.gesture;
     const action = handTracker.engine.resolveAction(gesture, settings.gestureBindings);
     if (gesture === 'none') {
       lastActionKeyRef.current = 'none';
+      pendingGestureActionRef.current = null;
       return;
     }
 
@@ -217,17 +235,27 @@ export const WhiteboardWorkspace: React.FC<WhiteboardWorkspaceProps> = ({
       action === 'draw' ||
       action === 'aim_hover' ||
       action === 'pause' ||
+      action === 'pan' ||
       action === 'laser_presentation' ||
       (action === 'zoom' && gesture === 'two_hand_zoom')
     ) {
+      lastActionKeyRef.current = 'none';
+      pendingGestureActionRef.current = null;
       return;
     }
 
     const actionKey = `${gesture}:${action}`;
+    const now = performance.now();
+    if (pendingGestureActionRef.current?.key !== actionKey) {
+      pendingGestureActionRef.current = { key: actionKey, since: now };
+      return;
+    }
+    // Discrete gestures need to remain stable across several camera frames,
+    // which prevents a noisy single frame from switching tools or pages.
+    if (now - pendingGestureActionRef.current.since < 100) return;
     if (actionKey === lastActionKeyRef.current) return;
     lastActionKeyRef.current = actionKey;
 
-    const now = performance.now();
     const cooldown = settings.gestureBindings?.cooldownMs ?? 350;
     if (now - lastGestureActionTimeRef.current < cooldown) return;
     lastGestureActionTimeRef.current = now;
@@ -239,8 +267,15 @@ export const WhiteboardWorkspace: React.FC<WhiteboardWorkspaceProps> = ({
       handleRedo();
       showGestureFeedback(`Gesture: ${gesture.toUpperCase()} · Redo`);
     } else if (action === 'erase_select') {
-      setSelectedTool('eraser');
-      showGestureFeedback(`Gesture: ${gesture.toUpperCase()} · Eraser mode`);
+      if (selectedTool === 'eraser') {
+        const restoredTool = lastInkToolRef.current === 'highlighter' ? 'highlighter' : 'pen';
+        setSelectedTool(restoredTool);
+        showGestureFeedback(`V-sign · ${restoredTool === 'highlighter' ? 'Marker' : 'Pen'} selected`);
+      } else {
+        if (selectedTool === 'pen' || selectedTool === 'highlighter') lastInkToolRef.current = selectedTool;
+        setSelectedTool('eraser');
+        showGestureFeedback('V-sign · Eraser selected');
+      }
     } else if (action === 'ai_solve') {
       setIsAIDrawerOpen(true);
       showGestureFeedback(`Gesture: ${gesture.toUpperCase()} · AI solver`);
@@ -275,6 +310,7 @@ export const WhiteboardWorkspace: React.FC<WhiteboardWorkspaceProps> = ({
     handleZoomIn,
     handleZoomOut,
     showGestureFeedback,
+    selectedTool,
   ]);
 
   // Two-hand zoom is a continuous action; scale in proportion to frame-to-frame
@@ -304,6 +340,115 @@ export const WhiteboardWorkspace: React.FC<WhiteboardWorkspaceProps> = ({
     },
     [activePage, pages, currentPageIndex, project, onSaveProject]
   );
+
+  // Convert a just-finished ink group into editable text after a brief pause.
+  // The source ink remains on the board, so a low-confidence guess never
+  // replaces the student's original work.
+  useEffect(() => {
+    if (settings.smartHandwriting === false || trackingState.isPenDown || trackingState.interactionState === 'WRITING') return;
+
+    const now = Date.now();
+    const recentInk = activePage.strokes.filter((stroke) =>
+      now - stroke.createdAt <= 6500 &&
+      !handledSmartInkIdsRef.current.has(stroke.id) &&
+      ['pen', 'highlighter'].includes(stroke.tool)
+    );
+    if (recentInk.length === 0) return;
+
+    let cancelled = false;
+    const pageId = activePage.id;
+    const capturedIds = recentInk.map((stroke) => stroke.id);
+    const timeoutId = setTimeout(async () => {
+      capturedIds.forEach((id) => handledSmartInkIdsRef.current.add(id));
+
+      const bounds = recentInk.map(getStrokeBoundingBox);
+      const minX = Math.min(...bounds.map((box) => box.minX));
+      const minY = Math.min(...bounds.map((box) => box.minY));
+      const maxX = Math.max(...bounds.map((box) => box.maxX));
+      const maxY = Math.max(...bounds.map((box) => box.maxY));
+      const padding = 24;
+      const scale = Math.min(1, 1400 / Math.max(1, maxX - minX), 500 / Math.max(1, maxY - minY));
+      const snapshot = document.createElement('canvas');
+      snapshot.width = Math.max(120, Math.ceil((maxX - minX + padding * 2) * scale));
+      snapshot.height = Math.max(96, Math.ceil((maxY - minY + padding * 2) * scale));
+      const context = snapshot.getContext('2d');
+      if (!context) return;
+
+      context.fillStyle = '#ffffff';
+      context.fillRect(0, 0, snapshot.width, snapshot.height);
+      context.save();
+      context.scale(scale, scale);
+      context.translate(padding - minX, padding - minY);
+      for (const stroke of recentInk) {
+        drawStrokeOnCanvas(context, {
+          ...stroke,
+          color: '#111827',
+          opacity: 1,
+          points: stroke.points.map((point) => ({ ...point })),
+        });
+      }
+      context.restore();
+      setSmartInkStatus('Reading handwriting…');
+
+      try {
+        const result = await recognizeHandwritingFromCanvas(snapshot, project.subject);
+        if (cancelled || activePageIdRef.current !== pageId) return;
+        if (!capturedIds.every((id) => activeStrokesRef.current.some((stroke) => stroke.id === id))) return;
+
+        const text = result.transcription?.trim();
+        if (!result.success || result.isSimulated || !text) {
+          setSmartInkStatus('AI text conversion needs a working Gemini key. Your ink is safe.');
+          showGestureFeedback('Smart Ink needs the Gemini API key in Vercel');
+          return;
+        }
+        if (result.confidence < 0.88 || result.needsConfirmation) {
+          setSmartInkStatus('Writing was unclear; original ink kept. Use AI Tutor → Convert to Text to review it.');
+          showGestureFeedback('Smart Ink kept your original writing for review');
+          return;
+        }
+
+        const fontSize = 24;
+        const baseline = maxY + fontSize + 12 > dimensions.height - 12
+          ? Math.max(fontSize + 6, minY - 10)
+          : maxY + fontSize + 12;
+        handleCommitStroke({
+          id: `smart_text_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+          tool: 'text',
+          color: '#0F172A',
+          size: fontSize,
+          fontSize,
+          opacity: 1,
+          text,
+          points: [{ x: Math.max(12, minX), y: baseline }],
+          createdAt: Date.now(),
+        });
+        setSmartInkStatus('Editable text added · original ink kept');
+        showGestureFeedback('Smart Ink · text recognized');
+      } catch (error) {
+        if (cancelled || activePageIdRef.current !== pageId) return;
+        const message = error instanceof Error ? error.message : 'AI handwriting recognition failed.';
+        setSmartInkStatus(message.includes('GEMINI_API_KEY') || message.includes('Gemini')
+          ? 'Add GEMINI_API_KEY in Vercel to enable Smart Ink.'
+          : 'Smart Ink could not reach Gemini. Your original ink is safe.');
+        showGestureFeedback('Smart Ink could not read this phrase; original ink kept');
+      }
+    }, 1800);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timeoutId);
+    };
+  }, [
+    activePage.id,
+    activePage.strokes,
+    dimensions.height,
+    handleCommitStroke,
+    project.subject,
+    settings.smartHandwriting,
+    showGestureFeedback,
+    trackingState.interactionState,
+    trackingState.isPenDown,
+  ]);
 
   // Stroke update helper (for moving selected objects)
   const handleUpdateStroke = useCallback(
@@ -438,9 +583,20 @@ export const WhiteboardWorkspace: React.FC<WhiteboardWorkspaceProps> = ({
 
   // Export handlers
   const handleExportPng = () => {
-    const baseCanvas = containerRef.current?.querySelector('canvas');
-    if (!baseCanvas) return;
-    const url = baseCanvas.toDataURL('image/png');
+    const canvasStage = containerRef.current;
+    const backgroundCanvas = canvasStage?.querySelector<HTMLCanvasElement>('[data-testid="whiteboard-canvas-background"]');
+    const baseCanvas = canvasStage?.querySelector<HTMLCanvasElement>('[data-testid="whiteboard-canvas-base"]');
+    const overlayCanvas = canvasStage?.querySelector<HTMLCanvasElement>('[data-testid="whiteboard-canvas"]');
+    if (!backgroundCanvas || !baseCanvas || !overlayCanvas) return;
+    const exportCanvas = document.createElement('canvas');
+    exportCanvas.width = baseCanvas.width;
+    exportCanvas.height = baseCanvas.height;
+    const exportContext = exportCanvas.getContext('2d');
+    if (!exportContext) return;
+    exportContext.drawImage(backgroundCanvas, 0, 0);
+    exportContext.drawImage(baseCanvas, 0, 0);
+    exportContext.drawImage(overlayCanvas, 0, 0);
+    const url = exportCanvas.toDataURL('image/png');
     const a = document.createElement('a');
     a.href = url;
     a.download = `${project.title.replace(/\s+/g, '_')}_page${currentPageIndex + 1}.png`;
@@ -518,7 +674,7 @@ export const WhiteboardWorkspace: React.FC<WhiteboardWorkspaceProps> = ({
                   : 'bg-cyan-400'
               }`}
             />
-            <span>MODE: {trackingState.interactionState}</span>
+            <span>MODE: {trackingState.isPanning ? 'PANNING' : trackingState.interactionState}</span>
           </div>
 
           {/* Gesture Badge */}
@@ -652,6 +808,9 @@ export const WhiteboardWorkspace: React.FC<WhiteboardWorkspaceProps> = ({
                       key={tool.id}
                       onClick={() => {
                         setSelectedTool(tool.id as DrawingTool);
+                        if (tool.id === 'pen' || tool.id === 'highlighter') {
+                          lastInkToolRef.current = tool.id as DrawingTool;
+                        }
                         if (tool.id !== 'select') {
                           setSelectedStrokeId(null);
                         }
@@ -770,6 +929,24 @@ export const WhiteboardWorkspace: React.FC<WhiteboardWorkspaceProps> = ({
           <div className="absolute top-4 left-1/2 -translate-x-1/2 z-40 px-4 py-2 bg-blue-950/90 text-cyan-200 border border-cyan-500/60 rounded-full shadow-2xl backdrop-blur-md text-xs font-mono font-medium flex items-center gap-2 animate-in fade-in slide-in-from-top-2">
             <HandIcon className="w-4 h-4 text-cyan-400" />
             <span>{gestureFeedback}</span>
+          </div>
+        )}
+
+        {smartInkStatus && (
+          <div
+            role="status"
+            aria-live="polite"
+            className="absolute top-14 left-1/2 -translate-x-1/2 z-40 max-w-[min(92vw,36rem)] px-3 py-2 bg-slate-950/95 text-slate-200 border border-slate-700 rounded-xl shadow-xl text-xs flex items-center gap-3"
+          >
+            <span>{smartInkStatus}</span>
+            <button
+              type="button"
+              onClick={() => setSmartInkStatus(null)}
+              className="text-slate-400 hover:text-white"
+              aria-label="Dismiss Smart Ink status"
+            >
+              ×
+            </button>
           </div>
         )}
 
@@ -930,7 +1107,7 @@ export const WhiteboardWorkspace: React.FC<WhiteboardWorkspaceProps> = ({
       <AIAssistantDrawer
         isOpen={isAIDrawerOpen}
         onClose={() => setIsAIDrawerOpen(false)}
-        canvasRef={{ current: containerRef.current?.querySelector('canvas') || null }}
+        canvasRef={{ current: containerRef.current?.querySelector<HTMLCanvasElement>('[data-testid="whiteboard-canvas-base"]') || null }}
         currentSubject={project.subject}
         onInsertText={(text: string) => {
           const newStroke: DrawingStroke = {

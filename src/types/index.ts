@@ -101,6 +101,7 @@ export type GestureAction =
   | 'zoom_in'
   | 'zoom_out'
   | 'ai_solve'
+  | 'pan'
   | 'none';
 
 export interface GestureBindingConfig {
@@ -142,6 +143,7 @@ export interface HandTrackingState {
   pinchDistance: number;
   isPinching: boolean;
   isPenDown?: boolean;
+  isPanning?: boolean;
   zoomScaleDelta?: number;
   fps: number;
   dominantHand: 'Left' | 'Right';
@@ -160,6 +162,7 @@ export interface UserSettings {
   cameraResolution: '720p' | '1080p' | '480p';
   academicLevel: 'High School' | 'Undergraduate' | 'Advanced AP/College';
   hapticFeedback: boolean;
+  smartHandwriting?: boolean;
   autoSaveInterval: number; // in seconds
   gestureBindings: GestureBindingConfig;
 }

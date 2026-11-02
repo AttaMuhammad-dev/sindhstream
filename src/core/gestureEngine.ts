@@ -27,6 +27,7 @@ export interface GestureEngineResult {
   pinchDistance: number;
   isPinching: boolean;
   isPenDown: boolean;
+  isPanning: boolean;
   strokeStarted: boolean;
   strokeTerminated: boolean;
   zoomScaleDelta?: number;
@@ -153,7 +154,7 @@ export class GestureEngine {
     const thumbExt = calculateDistance(wrist, thumbTip) > calculateDistance(wrist, thumbIp) * 1.08 &&
                      calculateDistance(thumbMcp, thumbTip) > calculateDistance(thumbMcp, thumbIp) * 1.15;
     const extendedFingers = [indexExt, middleExt, ringExt, pinkyExt].filter(Boolean).length;
-    const isOpenPalm = extendedFingers >= 4;
+    const isOpenPalm = extendedFingers === 4 && thumbExt;
 
     const effectiveThreshold = this.isCurrentlyPenDown
       ? settings.pinchSensitivity * hysteresis
@@ -229,11 +230,11 @@ export class GestureEngine {
     }
 
     // 7. Index Extended (Aim / Hover)
-    if (indexExt && !middleExt && !ringExt) {
+    if (indexExt && !middleExt && !ringExt && !pinkyExt) {
       return { gesture: 'pointing', pinchDistance, isPinching: false };
     }
 
-    return { gesture: 'pointing', pinchDistance, isPinching: false };
+    return { gesture: 'none', pinchDistance, isPinching: false };
   }
 
   /**
@@ -256,7 +257,7 @@ export class GestureEngine {
 
       return {
         gesture: 'none',
-        mappedAction: 'aim_hover',
+        mappedAction: 'none',
         interactionState: this.stateMachine.getState(),
         rawPoint: null,
         smoothedPoint: null,
@@ -264,6 +265,7 @@ export class GestureEngine {
         pinchDistance: 1,
         isPinching: false,
         isPenDown: false,
+        isPanning: false,
         strokeStarted: false,
         strokeTerminated,
       };
@@ -387,6 +389,7 @@ export class GestureEngine {
       pinchDistance,
       isPinching,
       isPenDown: this.isCurrentlyPenDown,
+      isPanning: mappedAction === 'pan',
       strokeStarted,
       strokeTerminated,
       zoomScaleDelta: zoomDelta,
@@ -402,6 +405,8 @@ export class GestureEngine {
   ): GestureAction {
     if (!bindings) {
       switch (gesture) {
+        case 'none':
+          return 'none';
         case 'pinch':
           return 'draw';
         case 'v_sign':
@@ -409,9 +414,9 @@ export class GestureEngine {
         case 'thumbs_up':
           return 'ai_solve';
         case 'open_palm':
-          return 'pause';
+          return 'pan';
         case 'closed_fist':
-          return 'laser_presentation';
+          return 'pause';
         case 'swipe_left':
           return 'prev_page';
         case 'swipe_right':
@@ -419,12 +424,15 @@ export class GestureEngine {
         case 'two_hand_zoom':
           return 'zoom';
         case 'pointing':
+          return 'laser_presentation';
         default:
           return 'aim_hover';
       }
     }
 
     switch (gesture) {
+      case 'none':
+        return 'none';
       case 'pinch':
         return bindings.pinchAction;
       case 'v_sign':

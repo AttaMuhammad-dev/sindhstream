@@ -28,6 +28,7 @@ const GESTURE_ACTION_OPTIONS: { value: GestureAction; label: string }[] = [
   { value: 'zoom_in', label: 'Zoom in' },
   { value: 'zoom_out', label: 'Zoom out' },
   { value: 'ai_solve', label: 'Open AI solver' },
+  { value: 'pan', label: 'Drag / pan board while held' },
   { value: 'none', label: 'Do nothing' },
 ];
 
@@ -328,7 +329,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               ))}
             </div>
             <p className="text-[11px] text-slate-500 mt-1.5">
-              720p HD is recommended for optimal 60 FPS vision model throughput.
+              720p HD is a balanced choice for the 24 FPS camera tracker.
             </p>
           </div>
 
@@ -390,6 +391,22 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             ))}
           </div>
         </div>
+
+        <label className="flex items-center justify-between gap-4 p-4 rounded-xl bg-slate-900/70 border border-slate-800 cursor-pointer">
+          <div>
+            <span className="block text-sm font-semibold text-slate-100">Smart handwriting conversion</span>
+            <span className="block mt-1 text-xs text-slate-400">
+              After you finish a short phrase, Gemini converts clear ink to editable text. Unclear writing stays as ink for review.
+            </span>
+          </div>
+          <input
+            type="checkbox"
+            checked={settings.smartHandwriting !== false}
+            onChange={(e) => update({ smartHandwriting: e.target.checked })}
+            className="h-4 w-4 shrink-0 accent-cyan-400 cursor-pointer"
+            aria-label="Enable smart handwriting conversion"
+          />
+        </label>
       </section>
 
       {/* Section 4: Customizable Gesture Actions & Bindings */}
@@ -414,11 +431,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 update({
                   gestureBindings: {
                     pinchAction: 'draw',
-                    pointingAction: 'aim_hover',
+                    pointingAction: 'laser_presentation',
                     vSignAction: 'erase_select',
                     thumbsUpAction: 'ai_solve',
-                    openPalmAction: 'pause',
-                    closedFistAction: 'laser_presentation',
+                    openPalmAction: 'pan',
+                    closedFistAction: 'pause',
                     swipeLeftAction: 'prev_page',
                     swipeRightAction: 'next_page',
                     twoHandZoomAction: 'zoom',
@@ -560,7 +577,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               </span>
             </div>
             <select
-              value={settings.gestureBindings?.pointingAction || 'aim_hover'}
+              value={settings.gestureBindings?.pointingAction || 'laser_presentation'}
               onChange={(e) =>
                 update({
                   gestureBindings: {
@@ -632,7 +649,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               </span>
             </div>
             <select
-              value={settings.gestureBindings?.openPalmAction || 'pause'}
+              value={settings.gestureBindings?.openPalmAction || 'pan'}
               onChange={(e) =>
                 update({
                   gestureBindings: {
@@ -656,7 +673,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               </span>
             </div>
             <select
-              value={settings.gestureBindings?.closedFistAction || 'laser_presentation'}
+              value={settings.gestureBindings?.closedFistAction || 'pause'}
               onChange={(e) =>
                 update({
                   gestureBindings: {

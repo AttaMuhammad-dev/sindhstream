@@ -23,9 +23,11 @@ VITE_HAND_MODEL_URL=/hand_landmarker.task
 
 Gemini features use the server-side `GEMINI_API_KEY` in `.env`. Firebase authentication and cloud sync require the project's Firebase configuration; the app still supports local project storage without signing in.
 
+For Vercel, open **Project → Settings → Environment Variables**, add a variable named `GEMINI_API_KEY`, paste the full key into its value, select **Production** (and Preview if needed), then save and redeploy. Keep this key server-side; do not add a `VITE_` prefix or commit it to GitHub.
+
 ## Gestures and controls
 
-Open **Settings → Customizable Gesture Controls** to bind each detected gesture to an available GestEra action. You can set the writing trigger to thumb/index pinch, thumb/middle pinch, or hold-index. Settings include hand-recognition confidence, pinch distance, smoothing, swipe threshold, action cooldown, and two-hand zoom sensitivity. **Live Gesture Tester** shows current recognition and pinch distance.
+Open **Settings → Customizable Gesture Controls** to bind each detected gesture to an available GestEra action. The default controls are pinch to write, full open palm to drag the board, a stable V-sign to toggle eraser and the last ink tool, and a single index finger for the laser pointer. You can set the writing trigger to thumb/index pinch, thumb/middle pinch, or hold-index. Settings include hand-recognition confidence, pinch distance, smoothing, swipe threshold, action cooldown, two-hand zoom sensitivity, and Smart Ink conversion. **Live Gesture Tester** shows current recognition and pinch distance.
 
 The canvas supports drawing, pointer movement, erasing, page navigation, undo/redo, clear confirmation, AI solver, presentation laser, and zoom. Gesture-triggered actions are held once per gesture and honor the configured cooldown; drawing, pause, laser, and two-hand zoom remain continuous while their gesture is active.
 
@@ -47,4 +49,4 @@ npm start         # Run the server in production mode
 - `src/services/handTracking.worker.ts` — local MediaPipe runtime and background hand inference.
 - `src/components/settings/SettingsView.tsx` — gesture bindings and accuracy controls.
 - `src/components/whiteboard/WhiteboardWorkspace.tsx` — board tools and gesture action dispatch.
-- `server.ts` and `server/geminiEducation.ts` — AI service endpoints.
+- `server/app.ts` and `server/geminiEducation.ts` — AI service endpoints.

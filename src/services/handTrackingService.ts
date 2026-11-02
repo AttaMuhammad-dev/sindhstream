@@ -50,6 +50,7 @@ class HandTrackingService {
     pinchDistance: 1,
     isPinching: false,
     isPenDown: false,
+    isPanning: false,
     fps: 0,
     dominantHand: 'Right',
   };
@@ -140,6 +141,7 @@ class HandTrackingService {
       pinchDistance: engineResult.pinchDistance,
       isPinching: engineResult.isPinching,
       isPenDown: engineResult.isPenDown,
+      isPanning: engineResult.isPanning,
       zoomScaleDelta: engineResult.zoomScaleDelta,
       fps: this.currentFps,
       errorMessage: undefined,
@@ -206,6 +208,14 @@ class HandTrackingService {
       const request: HandTrackingWorkerRequest = { type: 'confidence', value: this.workerConfidence };
       this.worker.postMessage(request);
     }
+  }
+
+  /** Keep normalized hand coordinates mapped to the actual whiteboard viewport. */
+  public updateCanvasDimensions(width: number, height: number) {
+    this.canvasDimensions = {
+      width: Math.max(1, width),
+      height: Math.max(1, height),
+    };
   }
 
   public async startTracking(
@@ -355,6 +365,7 @@ class HandTrackingService {
     this.state.pinchDistance = 1;
     this.state.isPinching = false;
     this.state.isPenDown = false;
+    this.state.isPanning = false;
     this.state.zoomScaleDelta = undefined;
     this.state.fps = 0;
     this.engine.reset();
@@ -365,8 +376,7 @@ class HandTrackingService {
   public simulateGesture(point: Point2D | null, gesture: HandTrackingState['gesture'], isPinching = false) {
     let interactionState: HandTrackingState['interactionState'] = 'TRACKING';
     if (isPinching || gesture === 'pinch') interactionState = 'WRITING';
-    else if (gesture === 'open_palm') interactionState = 'PAUSED';
-    else if (gesture === 'closed_fist') interactionState = 'PRESENTATION';
+    else if (gesture === 'closed_fist') interactionState = 'PAUSED';
     else if (!point) interactionState = 'IDLE';
 
     this.state = {
@@ -380,12 +390,13 @@ class HandTrackingService {
       pinchDistance: isPinching ? 0.02 : 0.08,
       isPinching,
       isPenDown: isPinching,
+      isPanning: false,
       fps: 60,
     };
 
     const simEngineResult: GestureEngineResult = {
       gesture,
-      mappedAction: isPinching ? 'draw' : gesture === 'open_palm' ? 'pause' : 'aim_hover',
+      mappedAction: isPinching ? 'draw' : gesture === 'open_palm' ? 'pan' : gesture === 'pointing' ? 'laser_presentation' : 'aim_hover',
       interactionState,
       rawPoint: point,
       smoothedPoint: point,
@@ -393,6 +404,7 @@ class HandTrackingService {
       pinchDistance: isPinching ? 0.02 : 0.08,
       isPinching,
       isPenDown: isPinching,
+      isPanning: false,
       strokeStarted: isPinching,
       strokeTerminated: !isPinching,
     };

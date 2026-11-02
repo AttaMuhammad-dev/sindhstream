@@ -163,7 +163,7 @@ export const WebcamHUD: React.FC<WebcamHUDProps> = ({
                     trackingState.interactionState === 'WRITING' ? 'bg-cyan-400 animate-ping' : 'bg-blue-400'
                   }`}
                 />
-                <span className="uppercase font-bold">{trackingState.interactionState}</span>
+                <span className="uppercase font-bold">{trackingState.isPanning ? 'PANNING' : trackingState.interactionState}</span>
                 <span className="text-slate-400">·</span>
                 <span className="uppercase">{trackingState.gesture}</span>
               </div>

@@ -110,17 +110,15 @@ export function isFingerExtended(
   mcp: HandLandmark,
   wrist: HandLandmark
 ): boolean {
-  const distWristToTip = calculateDistance(wrist, tip);
-  const distWristToPip = calculateDistance(wrist, pip);
-  const distWristToMcp = calculateDistance(wrist, mcp);
-  const distMcpToTip = calculateDistance(mcp, tip);
-  const distMcpToPip = calculateDistance(mcp, pip);
+  const distWristToTip = calculateDistance3D(wrist, tip);
+  const distWristToPip = calculateDistance3D(wrist, pip);
+  const distMcpToTip = calculateDistance3D(mcp, tip);
+  const distMcpToPip = calculateDistance3D(mcp, pip);
 
-  // Extended if tip is clearly further from MCP than PIP is, and tip is further from wrist than PIP
-  return (
-    (distWristToTip > distWristToPip && distWristToPip > distWristToMcp * 0.85) ||
-    (distMcpToTip > distMcpToPip * 1.25 && distWristToTip > distWristToMcp)
-  );
+  // Compare the whole finger in 3D and require a clear margin. The old OR
+  // condition classified bent fingers as extended when a curled tip happened
+  // to point sideways or toward the camera.
+  return distMcpToTip > distMcpToPip * 1.3 && distWristToTip > distWristToPip * 1.04;
 }
 
 /**
@@ -177,7 +175,8 @@ export function classifyHandGesture(
   const pinkyPip = landmarks[MEDIAPIPE_LANDMARKS.PINKY_PIP];
   const pinkyMcp = landmarks[MEDIAPIPE_LANDMARKS.PINKY_MCP];
 
-  const pinchDist = calculateDistance(thumbTip, indexTip);
+  const handScale = calculateHandScale(wrist, middleMcp);
+  const pinchDist = calculateDistance3D(thumbTip, indexTip) * (0.22 / handScale);
   const isPinch = pinchDist <= pinchThreshold;
 
   const indexExt = isFingerExtended(indexTip, indexPip, indexMcp, wrist);
@@ -193,7 +192,7 @@ export function classifyHandGesture(
 
   // 2. Open palm: 4 or 5 fingers extended
   const extendedCount = [indexExt, middleExt, ringExt, pinkyExt].filter(Boolean).length;
-  if (extendedCount >= 4) {
+  if (extendedCount === 4 && thumbExt) {
     return 'open_palm';
   }
 
@@ -213,11 +212,11 @@ export function classifyHandGesture(
   }
 
   // 6. Pointing: Only Index extended
-  if (indexExt && !middleExt && !ringExt) {
+  if (indexExt && !middleExt && !ringExt && !pinkyExt) {
     return 'pointing';
   }
 
-  return 'pointing';
+  return 'none';
 }
 
 /**

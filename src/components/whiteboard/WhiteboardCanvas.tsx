@@ -78,6 +78,7 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
   // Panning interaction state
   const isPanningRef = useRef(false);
   const lastPanStartRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const previousGesturePanPointRef = useRef<Point2D | null>(null);
 
   // Object dragging state for 'select' tool
   const isDraggingObjectRef = useRef(false);
@@ -177,6 +178,18 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
     // 1. Render active in-progress stroke
     if (currentStrokeRef.current && currentStrokeRef.current.points.length > 0) {
       drawStrokeOnCanvas(ctx, currentStrokeRef.current);
+      if (currentStrokeRef.current.tool === 'eraser') {
+        const latestPoint = currentStrokeRef.current.points[currentStrokeRef.current.points.length - 1];
+        ctx.save();
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.strokeStyle = 'rgba(248, 113, 113, 0.95)';
+        ctx.lineWidth = 2 / zoom;
+        ctx.setLineDash([4 / zoom, 3 / zoom]);
+        ctx.beginPath();
+        ctx.arc(latestPoint.x, latestPoint.y, Math.max(8, brushSize * 2), 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      }
     }
 
     // 2. Render Selection Bounding Box & Handles
@@ -432,6 +445,7 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
     if (!trackingState.isTrackingActive && !isVirtualMode) return;
     const screenPoint = trackingState.smoothedPoint || trackingState.rawPoint;
     if (!screenPoint) {
+      previousGesturePanPointRef.current = null;
       if (currentStrokeRef.current) {
         onCommitStroke(currentStrokeRef.current);
         currentStrokeRef.current = null;
@@ -439,6 +453,25 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
       }
       return;
     }
+
+    if (trackingState.isPanning) {
+      if (currentStrokeRef.current) {
+        onCommitStroke(currentStrokeRef.current);
+        currentStrokeRef.current = null;
+        renderOverlay();
+      }
+      const previousPoint = previousGesturePanPointRef.current;
+      if (previousPoint) {
+        onUpdateTransform({
+          x: pan.x + screenPoint.x - previousPoint.x,
+          y: pan.y + screenPoint.y - previousPoint.y,
+        }, zoom);
+      }
+      previousGesturePanPointRef.current = screenPoint;
+      return;
+    }
+
+    previousGesturePanPointRef.current = null;
 
     // Convert screen point to canvas world coordinates
     const worldPoint = screenToWorld(screenPoint, pan, zoom);
@@ -520,12 +553,14 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
     trackingState.interactionState,
     trackingState.isPinching,
     trackingState.isTrackingActive,
+    trackingState.isPanning,
     isVirtualMode,
     selectedTool,
     selectedColor,
     brushSize,
     pan,
     zoom,
+    onUpdateTransform,
     autoShapeRecognition,
     onCommitStroke,
     renderOverlay,
@@ -548,12 +583,14 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
       <canvas
         ref={bgCanvasRef}
         className="absolute inset-0 z-0 pointer-events-none"
+        data-testid="whiteboard-canvas-background"
       />
 
       {/* Base Canvas (Layer 1): Renders completed vector strokes */}
       <canvas
         ref={baseCanvasRef}
         className="absolute inset-0 z-10 pointer-events-none"
+        data-testid="whiteboard-canvas-base"
       />
 
       {/* Overlay Canvas (Layer 2): Handles pointer events, active strokes, and selection box */}

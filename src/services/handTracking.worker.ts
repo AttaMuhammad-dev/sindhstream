@@ -57,7 +57,9 @@ workerScope.addEventListener('message', async (event: MessageEvent<HandTrackingW
   try {
     if (message.type === 'init') {
       confidenceThreshold = message.confidence;
-      const vision = await FilesetResolver.forVisionTasks(message.wasmRoot);
+      // This worker is a JavaScript module worker. Load MediaPipe's ES-module
+      // WASM loader; the classic loader leaves ModuleFactory undefined here.
+      const vision = await FilesetResolver.forVisionTasks(message.wasmRoot, true);
       landmarker = await createLandmarker(message.modelUrl, vision);
       post({ type: 'ready' });
       return;

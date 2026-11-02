@@ -7,10 +7,12 @@ import { Project, UserSettings, LearningActivityStats } from '../types';
 
 const STORAGE_KEYS = {
   PROJECTS: 'gestera_projects_v1',
-  SETTINGS: 'gestera_settings_v1',
+  SETTINGS: 'gestera_settings_v2',
   STATS: 'gestera_stats_v1',
   ACTIVE_PROJECT: 'gestera_active_project_id',
 };
+
+const PREVIOUS_GESTERA_SETTINGS_KEY = 'gestera_settings_v1';
 
 const LEGACY_STORAGE_KEYS = {
   PROJECTS: 'airwrite_projects_v1',
@@ -31,14 +33,15 @@ export const DEFAULT_SETTINGS: UserSettings = {
   cameraResolution: '720p',
   academicLevel: 'Undergraduate',
   hapticFeedback: true,
+  smartHandwriting: true,
   autoSaveInterval: 15,
   gestureBindings: {
     pinchAction: 'draw',
-    pointingAction: 'aim_hover',
+    pointingAction: 'laser_presentation',
     vSignAction: 'erase_select',
     thumbsUpAction: 'ai_solve',
-    openPalmAction: 'pause',
-    closedFistAction: 'laser_presentation',
+    openPalmAction: 'pan',
+    closedFistAction: 'pause',
     swipeLeftAction: 'prev_page',
     swipeRightAction: 'next_page',
     twoHandZoomAction: 'zoom',
@@ -209,15 +212,26 @@ export function toggleProjectStar(id: string): Project[] {
 
 export function getStoredSettings(): UserSettings {
   try {
-    const raw = localStorage.getItem(STORAGE_KEYS.SETTINGS) || localStorage.getItem(LEGACY_STORAGE_KEYS.SETTINGS);
+    const raw = localStorage.getItem(STORAGE_KEYS.SETTINGS) ||
+      localStorage.getItem(PREVIOUS_GESTERA_SETTINGS_KEY) ||
+      localStorage.getItem(LEGACY_STORAGE_KEYS.SETTINGS);
     if (!raw) return DEFAULT_SETTINGS;
     const saved = JSON.parse(raw) as Partial<UserSettings>;
+    const savedBindings: Partial<UserSettings['gestureBindings']> = saved.gestureBindings || {};
+    const hadPreviousDefaultBindings = savedBindings.pointingAction === 'aim_hover' &&
+      savedBindings.openPalmAction === 'pause' &&
+      savedBindings.closedFistAction === 'laser_presentation';
     const settings = {
       ...DEFAULT_SETTINGS,
       ...saved,
       gestureBindings: {
         ...DEFAULT_SETTINGS.gestureBindings,
-        ...(saved.gestureBindings || {}),
+        ...savedBindings,
+        ...(hadPreviousDefaultBindings ? {
+          pointingAction: 'laser_presentation' as const,
+          openPalmAction: 'pan' as const,
+          closedFistAction: 'pause' as const,
+        } : {}),
       },
     };
     localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));

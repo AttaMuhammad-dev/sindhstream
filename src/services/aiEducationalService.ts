@@ -49,7 +49,19 @@ async function postJsonWithTimeout<T>(url: string, body: any): Promise<T> {
 export function getCanvasBase64(canvas: HTMLCanvasElement | null): string | undefined {
   if (!canvas) return undefined;
   try {
-    return canvas.toDataURL('image/png', 0.85);
+    // Whiteboard strokes are drawn on transparent canvases. Composite them on
+    // white so OCR and analysis receive clear, portable pixels.
+    const snapshot = document.createElement('canvas');
+    snapshot.width = canvas.width;
+    snapshot.height = canvas.height;
+    const context = snapshot.getContext('2d');
+    if (!context) return undefined;
+    context.fillStyle = '#ffffff';
+    context.fillRect(0, 0, snapshot.width, snapshot.height);
+    context.filter = 'grayscale(1) contrast(1.35)';
+    context.drawImage(canvas, 0, 0);
+    context.filter = 'none';
+    return snapshot.toDataURL('image/png', 0.9);
   } catch (err) {
     console.warn('Could not read canvas pixels:', err);
     return undefined;
@@ -61,34 +73,15 @@ export async function recognizeHandwritingFromCanvas(
   subject: string = 'General'
 ): Promise<HandwritingRecognitionResult> {
   const imageBase64 = getCanvasBase64(canvas);
-  try {
-    return await postJsonWithTimeout<HandwritingRecognitionResult>('/api/ai/handwriting', {
-      imageBase64,
-      subject,
-    });
-  } catch (err: any) {
-    console.warn('Handwriting OCR request failed, returning fallback:', err);
-    return {
-      success: true,
-      transcription: 'E = m c^2 + \\frac{1}{2} m v^2',
-      confidence: 0.92,
-      isMath: true,
-      detectedSubject: subject,
-      needsConfirmation: true,
-      ambiguities: [
-        {
-          id: 'amb_v',
-          character: 'v',
-          alternatives: ['v', 'u', '\\nu'],
-          selected: 'v',
-          position: 21,
-          context: 'velocity term in kinetic energy formula',
-        },
-      ],
-      notes: 'Local simulation: check velocity subscript confirmation.',
-      isSimulated: true,
-    };
+  if (!imageBase64) throw new Error('The whiteboard image could not be captured.');
+  const result = await postJsonWithTimeout<HandwritingRecognitionResult>('/api/ai/handwriting', {
+    imageBase64,
+    subject,
+  });
+  if (result.isSimulated) {
+    throw new Error('Add GEMINI_API_KEY in Vercel to enable real handwriting recognition.');
   }
+  return result;
 }
 
 export async function solveMathProblem(
