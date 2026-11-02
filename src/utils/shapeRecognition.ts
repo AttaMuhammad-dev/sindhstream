@@ -131,9 +131,20 @@ export function recognizeShape(stroke: DrawingStroke): RecognizedShape | null {
   if (stroke.points.length < 3) return null;
   if (['text', 'eraser', 'highlighter'].includes(stroke.tool)) return null;
 
-  // 1. Test circle fit
+  // A loose closure tolerance turns many hooked letters and scribbles into
+  // circles. Require a genuinely closed, round trace before snapping.
   const circleTest = testCircleFit(stroke.points);
-  if (circleTest.isCircle && circleTest.confidence > 0.72) {
+  const first = stroke.points[0];
+  const last = stroke.points[stroke.points.length - 1];
+  const diagonal = Math.hypot(last.x - first.x, last.y - first.y);
+  const strokeBounds = stroke.points.reduce((b, p) => ({
+    minX: Math.min(b.minX, p.x), maxX: Math.max(b.maxX, p.x),
+    minY: Math.min(b.minY, p.y), maxY: Math.max(b.maxY, p.y),
+  }), { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity });
+  const strokeWidth = strokeBounds.maxX - strokeBounds.minX;
+  const strokeHeight = strokeBounds.maxY - strokeBounds.minY;
+  const aspect = Math.min(strokeWidth, strokeHeight) / Math.max(strokeWidth, strokeHeight, 1);
+  if (circleTest.isCircle && circleTest.confidence > 0.82 && diagonal < circleTest.radius * 0.55 && aspect > 0.72) {
     const { center, radius } = circleTest;
     return {
       shape: 'circle',
@@ -143,6 +154,22 @@ export function recognizeShape(stroke: DrawingStroke): RecognizedShape | null {
         { x: center.x + radius, y: center.y + radius },
       ],
     };
+  }
+
+  // A triangle is a closed trace with three dominant corners. Use perimeter
+  // and closure checks so ordinary letters and open zigzags remain freehand.
+  const corners: Point2D[] = [];
+  const totalLength = stroke.points.slice(1).reduce((sum, p, i) => sum + Math.hypot(p.x - stroke.points[i].x, p.y - stroke.points[i].y), 0);
+  const tolerance = Math.max(6, Math.min(strokeWidth, strokeHeight) * 0.045);
+  for (const point of stroke.points) {
+    if (!corners.length || Math.hypot(point.x - corners[corners.length - 1].x, point.y - corners[corners.length - 1].y) > tolerance) corners.push(point);
+  }
+  if (corners.length > 3 && Math.hypot(corners[0].x - corners[corners.length - 1].x, corners[0].y - corners[corners.length - 1].y) < Math.min(strokeWidth, strokeHeight) * 0.3) {
+    const vertices = [corners[0], ...corners.slice(1, -1).filter((p, i) => i % Math.max(1, Math.floor((corners.length - 2) / 2)) === 0)].slice(0, 3);
+    const perimeter = vertices.length === 3 ? vertices.reduce((sum, p, i) => sum + Math.hypot(p.x - vertices[(i + 1) % 3].x, p.y - vertices[(i + 1) % 3].y), 0) : 0;
+    if (vertices.length === 3 && perimeter > 0 && totalLength > 0 && Math.abs(totalLength - perimeter) / perimeter < 0.5) {
+      return { shape: 'triangle', confidence: 0.82, fittedPoints: [...vertices, vertices[0]] };
+    }
   }
 
   // 2. Test rectangle fit

@@ -28,6 +28,7 @@ import {
   ArrowRight,
   Square,
   Circle,
+  Triangle,
   Type,
   Flame,
   Sparkles,
@@ -427,9 +428,10 @@ export const WhiteboardWorkspace: React.FC<WhiteboardWorkspaceProps> = ({
       } catch (error) {
         if (cancelled || activePageIdRef.current !== pageId) return;
         const message = error instanceof Error ? error.message : 'AI handwriting recognition failed.';
-        setSmartInkStatus(message.includes('GEMINI_API_KEY') || message.includes('Gemini')
-          ? 'Add GEMINI_API_KEY in Vercel to enable Smart Ink.'
-          : 'Smart Ink could not reach Gemini. Your original ink is safe.');
+        const usefulMessage = message.replace(/^Server responded with status \d+$/i, 'The AI server returned an error.').slice(0, 140);
+        setSmartInkStatus(message.includes('GEMINI_API_KEY')
+          ? 'Gemini key is missing on this deployment. Redeploy after adding GEMINI_API_KEY.'
+          : `Gemini error: ${usefulMessage} Original ink is safe.`);
         showGestureFeedback('Smart Ink could not read this phrase; original ink kept');
       }
     }, 1800);
@@ -799,6 +801,7 @@ export const WhiteboardWorkspace: React.FC<WhiteboardWorkspaceProps> = ({
                   { id: 'arrow', icon: ArrowRight, label: 'Vector Arrow' },
                   { id: 'rect', icon: Square, label: 'Rectangle' },
                   { id: 'circle', icon: Circle, label: 'Circle' },
+                  { id: 'triangle', icon: Triangle, label: 'Triangle' },
                   { id: 'laser', icon: Flame, label: 'Laser Pointer' },
                 ].map((tool) => {
                   const Icon = tool.icon;

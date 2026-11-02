@@ -17,6 +17,7 @@ export type DrawingTool =
   | 'arrow' 
   | 'rect' 
   | 'circle' 
+  | 'triangle'
   | 'text' 
   | 'laser';
 

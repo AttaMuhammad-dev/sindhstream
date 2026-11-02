@@ -202,6 +202,17 @@ export function drawStrokeOnCanvas(
     ctx.beginPath();
     ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
     ctx.stroke();
+  } else if (tool === 'triangle' && points.length >= 2) {
+    const xs = points.map((p) => p.x);
+    const ys = points.map((p) => p.y);
+    const left = Math.min(...xs), right = Math.max(...xs);
+    const top = Math.min(...ys), bottom = Math.max(...ys);
+    ctx.beginPath();
+    ctx.moveTo((left + right) / 2, top);
+    ctx.lineTo(right, bottom);
+    ctx.lineTo(left, bottom);
+    ctx.closePath();
+    ctx.stroke();
   } else {
     // Freeform handwriting with quadratic bezier interpolation
     if (points.length === 1) {
