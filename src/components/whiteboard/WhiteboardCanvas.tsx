@@ -391,7 +391,7 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
     // Handle In-Progress Stroke Drawing
     if (!currentStrokeRef.current) return;
 
-    const isShape = ['line', 'arrow', 'rect', 'circle', 'triangle'].includes(selectedTool);
+    const isShape = ['line', 'arrow', 'rect', 'circle', 'triangle', 'ellipse', 'diamond', 'pentagon', 'hexagon', 'star', 'trapezoid', 'parallelogram'].includes(selectedTool);
     if (isShape) {
       const startPoint = currentStrokeRef.current.points[0];
       currentStrokeRef.current.points = [
@@ -506,7 +506,7 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
           createdAt: Date.now(),
         };
       } else {
-        const isShape = ['line', 'arrow', 'rect', 'circle', 'triangle'].includes(selectedTool);
+        const isShape = ['line', 'arrow', 'rect', 'circle', 'triangle', 'ellipse', 'diamond', 'pentagon', 'hexagon', 'star', 'trapezoid', 'parallelogram'].includes(selectedTool);
         if (isShape) {
           const startPt = currentStrokeRef.current.points[0];
           currentStrokeRef.current.points = [

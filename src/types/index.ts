@@ -18,6 +18,13 @@ export type DrawingTool =
   | 'rect' 
   | 'circle' 
   | 'triangle'
+  | 'ellipse'
+  | 'diamond'
+  | 'pentagon'
+  | 'hexagon'
+  | 'star'
+  | 'trapezoid'
+  | 'parallelogram'
   | 'text' 
   | 'laser';
 

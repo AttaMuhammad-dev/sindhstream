@@ -213,6 +213,23 @@ export function drawStrokeOnCanvas(
     ctx.lineTo(left, bottom);
     ctx.closePath();
     ctx.stroke();
+  } else if (['ellipse', 'diamond', 'pentagon', 'hexagon', 'star', 'trapezoid', 'parallelogram'].includes(tool) && points.length >= 2) {
+    const xs = points.map((p) => p.x), ys = points.map((p) => p.y);
+    const left = Math.min(...xs), right = Math.max(...xs), top = Math.min(...ys), bottom = Math.max(...ys);
+    const cx = (left + right) / 2, cy = (top + bottom) / 2, rx = Math.max(1, (right - left) / 2), ry = Math.max(1, (bottom - top) / 2);
+    if (tool === 'ellipse') {
+      ctx.beginPath(); ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2); ctx.stroke();
+    } else {
+      let vertices: Array<{x:number;y:number}>;
+      if (tool === 'diamond') vertices = [{x:cx,y:top},{x:right,y:cy},{x:cx,y:bottom},{x:left,y:cy}];
+      else if (tool === 'trapezoid') vertices = [{x:left+rx*.35,y:top},{x:right-rx*.35,y:top},{x:right,y:bottom},{x:left,y:bottom}];
+      else if (tool === 'parallelogram') vertices = [{x:left+rx*.35,y:top},{x:right,y:top},{x:right-rx*.35,y:bottom},{x:left,y:bottom}];
+      else {
+        const sides = tool === 'pentagon' ? 5 : tool === 'hexagon' ? 6 : 10;
+        vertices = Array.from({length:sides},(_,i)=>{const a=-Math.PI/2+i*Math.PI*2/sides; const r=tool==='star'&&i%2===1?.42:1; return {x:cx+Math.cos(a)*rx*r,y:cy+Math.sin(a)*ry*r};});
+      }
+      ctx.beginPath(); ctx.moveTo(vertices[0].x,vertices[0].y); for(let i=1;i<vertices.length;i++) ctx.lineTo(vertices[i].x,vertices[i].y); ctx.closePath(); ctx.stroke();
+    }
   } else {
     // Freeform handwriting with quadratic bezier interpolation
     if (points.length === 1) {

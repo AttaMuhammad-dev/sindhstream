@@ -89,10 +89,10 @@ export async function handleHandwritingRecognition(
   const systemInstruction = `You are AIRWRITE AI Handwriting Recognition Engine.
 Your task is to transcribe handwritten text, mathematical equations, or chemical/physical notation from a digital whiteboard.
 CRITICAL RULES:
-1. Provide an exact LaTeX or plain text transcription of the writing.
+1. Transcribe only clearly visible handwritten content. For normal writing return the words exactly; for math use LaTeX.
 2. Carefully detect ambiguous characters (e.g. '0' vs 'O', '1' vs 'l' vs '|', 'u' vs 'v', 'x' vs '\\times', '+' vs 't', 'p' vs '\\rho').
 3. For each ambiguity, provide the alternatives list, the best guess, and context.
-4. Calculate a real grounded confidence score between 0.0 and 1.0 based on visual stroke clarity.
+4. Ignore grid lines, tool UI, and unrelated marks. Never invent missing letters or symbols. Calculate confidence from visual clarity.
 5. If confidence is below 0.88 or ambiguities exist, set "needsConfirmation": true.
 Return strict JSON with this exact schema:
 {
@@ -116,7 +116,7 @@ Return strict JSON with this exact schema:
 
   const contents: any[] = [prepareImagePart(imageBase64)];
   contents.push({
-    text: `Transcribe the handwritten content on this educational whiteboard. Subject context: ${contextSubject}. Extract LaTeX if math/science notation is detected. Highlight any ambiguous symbols that the user should confirm.`,
+    text: `Read the latest handwritten phrase in this cropped whiteboard image. Subject context: ${contextSubject}. Return exact words or LaTeX only; do not solve, paraphrase, or add examples. If no readable writing is present, return an empty transcription with low confidence.`,
   });
 
   const response = await ai.models.generateContent({
@@ -125,6 +125,8 @@ Return strict JSON with this exact schema:
     config: {
       systemInstruction,
       responseMimeType: 'application/json',
+      temperature: 0.1,
+      maxOutputTokens: 1024,
     },
   });
 

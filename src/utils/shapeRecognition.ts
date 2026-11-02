@@ -124,6 +124,25 @@ function testRectFit(points: Point2D[]): { isRect: boolean; confidence: number; 
   };
 }
 
+function distanceToSegment(point: Point2D, start: Point2D, end: Point2D): number {
+  const dx = end.x - start.x, dy = end.y - start.y;
+  const t = Math.max(0, Math.min(1, ((point.x - start.x) * dx + (point.y - start.y) * dy) / Math.max(1, dx * dx + dy * dy)));
+  return Math.hypot(point.x - (start.x + t * dx), point.y - (start.y + t * dy));
+}
+
+function simplify(points: Point2D[], tolerance: number): Point2D[] {
+  if (points.length <= 2) return points;
+  let farthest = 0, index = 0;
+  for (let i = 1; i < points.length - 1; i++) {
+    const distance = distanceToSegment(points[i], points[0], points[points.length - 1]);
+    if (distance > farthest) { farthest = distance; index = i; }
+  }
+  if (farthest <= tolerance) return [points[0], points[points.length - 1]];
+  const left = simplify(points.slice(0, index + 1), tolerance);
+  const right = simplify(points.slice(index), tolerance);
+  return [...left.slice(0, -1), ...right];
+}
+
 /**
  * Analyzes a freehand stroke and recognizes if it represents a circle, rectangle, line, or arrow
  */
@@ -158,17 +177,15 @@ export function recognizeShape(stroke: DrawingStroke): RecognizedShape | null {
 
   // A triangle is a closed trace with three dominant corners. Use perimeter
   // and closure checks so ordinary letters and open zigzags remain freehand.
-  const corners: Point2D[] = [];
-  const totalLength = stroke.points.slice(1).reduce((sum, p, i) => sum + Math.hypot(p.x - stroke.points[i].x, p.y - stroke.points[i].y), 0);
-  const tolerance = Math.max(6, Math.min(strokeWidth, strokeHeight) * 0.045);
-  for (const point of stroke.points) {
-    if (!corners.length || Math.hypot(point.x - corners[corners.length - 1].x, point.y - corners[corners.length - 1].y) > tolerance) corners.push(point);
-  }
-  if (corners.length > 3 && Math.hypot(corners[0].x - corners[corners.length - 1].x, corners[0].y - corners[corners.length - 1].y) < Math.min(strokeWidth, strokeHeight) * 0.3) {
-    const vertices = [corners[0], ...corners.slice(1, -1).filter((p, i) => i % Math.max(1, Math.floor((corners.length - 2) / 2)) === 0)].slice(0, 3);
-    const perimeter = vertices.length === 3 ? vertices.reduce((sum, p, i) => sum + Math.hypot(p.x - vertices[(i + 1) % 3].x, p.y - vertices[(i + 1) % 3].y), 0) : 0;
-    if (vertices.length === 3 && perimeter > 0 && totalLength > 0 && Math.abs(totalLength - perimeter) / perimeter < 0.5) {
-      return { shape: 'triangle', confidence: 0.82, fittedPoints: [...vertices, vertices[0]] };
+  const closed = diagonal < Math.min(strokeWidth, strokeHeight) * 0.28;
+  if (closed && stroke.points.length >= 8) {
+    const trace = [...stroke.points];
+    trace[trace.length - 1] = trace[0];
+    const vertices = simplify(trace, Math.max(5, Math.hypot(strokeWidth, strokeHeight) * 0.045));
+    const uniqueVertices = vertices.slice(0, -1);
+    if (uniqueVertices.length >= 3 && uniqueVertices.length <= 6) {
+      const shape: DrawingTool | null = uniqueVertices.length === 3 ? 'triangle' : uniqueVertices.length === 5 ? 'pentagon' : uniqueVertices.length === 6 ? 'hexagon' : null;
+      if (shape) return { shape, confidence: 0.82, fittedPoints: uniqueVertices };
     }
   }
 

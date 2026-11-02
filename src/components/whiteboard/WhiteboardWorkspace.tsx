@@ -349,11 +349,19 @@ export const WhiteboardWorkspace: React.FC<WhiteboardWorkspaceProps> = ({
     if (settings.smartHandwriting === false || trackingState.isPenDown || trackingState.interactionState === 'WRITING') return;
 
     const now = Date.now();
-    const recentInk = activePage.strokes.filter((stroke) =>
+    const candidates = activePage.strokes.filter((stroke) =>
       now - stroke.createdAt <= 6500 &&
       !handledSmartInkIdsRef.current.has(stroke.id) &&
       ['pen', 'highlighter'].includes(stroke.tool)
-    );
+    ).sort((a, b) => a.createdAt - b.createdAt);
+    // Only recognize the latest phrase. Including every recent doodle from
+    // the last several seconds makes the model see overlapping scribbles.
+    let phraseStart = Math.max(0, candidates.length - 1);
+    for (let i = candidates.length - 1; i > 0; i--) {
+      if (candidates[i].createdAt - candidates[i - 1].createdAt > 2600) break;
+      phraseStart = i - 1;
+    }
+    const recentInk = candidates.slice(phraseStart);
     if (recentInk.length === 0) return;
 
     let cancelled = false;
@@ -802,6 +810,13 @@ export const WhiteboardWorkspace: React.FC<WhiteboardWorkspaceProps> = ({
                   { id: 'rect', icon: Square, label: 'Rectangle' },
                   { id: 'circle', icon: Circle, label: 'Circle' },
                   { id: 'triangle', icon: Triangle, label: 'Triangle' },
+                  { id: 'ellipse', icon: Circle, label: 'Ellipse' },
+                  { id: 'diamond', icon: Square, label: 'Diamond' },
+                  { id: 'pentagon', icon: Square, label: 'Pentagon' },
+                  { id: 'hexagon', icon: Square, label: 'Hexagon' },
+                  { id: 'star', icon: Sparkles, label: 'Star' },
+                  { id: 'trapezoid', icon: Square, label: 'Trapezoid' },
+                  { id: 'parallelogram', icon: Square, label: 'Parallelogram' },
                   { id: 'laser', icon: Flame, label: 'Laser Pointer' },
                 ].map((tool) => {
                   const Icon = tool.icon;
@@ -841,7 +856,7 @@ export const WhiteboardWorkspace: React.FC<WhiteboardWorkspaceProps> = ({
                       ? 'bg-cyan-950/80 text-cyan-300 border border-cyan-700/80'
                       : 'text-slate-500 hover:text-slate-300'
                   }`}
-                  title="Automatic geometric shape recognition for circles, rectangles & lines"
+                  title="Auto-snap freehand lines, circles, rectangles, triangles, pentagons and hexagons"
                 >
                   <Wand2 className="w-3 h-3 text-cyan-400" />
                   <span className="text-[9px]">Shapes</span>
