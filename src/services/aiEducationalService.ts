@@ -16,31 +16,54 @@ import type {
   EducationalLevel,
 } from '../types/ai';
 
-const REQUEST_TIMEOUT_MS = 25000;
+const REQUEST_TIMEOUT_MS = 50000;
+const MAX_IMAGE_EDGE = 1400;
+const IMAGE_PADDING = 24;
+
+function pause(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 async function postJsonWithTimeout<T>(url: string, body: any): Promise<T> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
-  try {
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(body),
-      signal: controller.signal,
-    });
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
 
-    if (!res.ok) {
-      const errJson = await res.json().catch(() => ({}));
-      throw new Error(errJson.error || `Server responded with status ${res.status}`);
+      if (!res.ok) {
+        const responseText = await res.text().catch(() => '');
+        let responseJson: { error?: string; message?: string } = {};
+        try {
+          const decoded = JSON.parse(responseText);
+          if (decoded && typeof decoded === 'object') responseJson = decoded;
+        } catch { /* Vercel may return an HTML error page. */ }
+        if ([429, 502, 503, 504].includes(res.status) && attempt === 0) {
+          await pause(700);
+          continue;
+        }
+        const detail = responseJson.error || responseJson.message;
+        throw new Error(detail || `AI endpoint returned HTTP ${res.status}${responseText ? '. Check Vercel function logs.' : '.'}`);
+      }
+
+      return (await res.json()) as T;
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        throw new Error(`AI request timed out after ${Math.round(REQUEST_TIMEOUT_MS / 1000)} seconds.`);
+      }
+      throw error;
+    } finally {
+      clearTimeout(timer);
     }
-
-    return (await res.json()) as T;
-  } finally {
-    clearTimeout(timer);
   }
+
+  throw new Error('AI request failed after a retry.');
 }
 
 /**
@@ -49,19 +72,55 @@ async function postJsonWithTimeout<T>(url: string, body: any): Promise<T> {
 export function getCanvasBase64(canvas: HTMLCanvasElement | null): string | undefined {
   if (!canvas) return undefined;
   try {
-    // Whiteboard strokes are drawn on transparent canvases. Composite them on
-    // white so OCR and analysis receive clear, portable pixels.
+    const sourceContext = canvas.getContext('2d', { willReadFrequently: true });
+    if (!sourceContext || canvas.width < 1 || canvas.height < 1) return undefined;
+
+    // Crop transparent whiteboard layers to their actual ink before sending
+    // them. Smaller images avoid serverless body limits and make handwriting
+    // occupy more of the model's visual input.
+    const image = sourceContext.getImageData(0, 0, canvas.width, canvas.height);
+    const { data } = image;
+    let minX = canvas.width;
+    let minY = canvas.height;
+    let maxX = -1;
+    let maxY = -1;
+    const scanStep = Math.max(1, Math.floor(Math.max(canvas.width, canvas.height) / 900));
+    for (let y = 0; y < canvas.height; y += scanStep) {
+      for (let x = 0; x < canvas.width; x += scanStep) {
+        if (data[(y * canvas.width + x) * 4 + 3] > 18) {
+          minX = Math.min(minX, x);
+          minY = Math.min(minY, y);
+          maxX = Math.max(maxX, x);
+          maxY = Math.max(maxY, y);
+        }
+      }
+    }
+
+    if (maxX < 0) {
+      minX = 0;
+      minY = 0;
+      maxX = canvas.width - 1;
+      maxY = canvas.height - 1;
+    }
+    const padX = IMAGE_PADDING * Math.max(1, canvas.width / 1400);
+    const padY = IMAGE_PADDING * Math.max(1, canvas.height / 900);
+    const sx = Math.max(0, Math.floor(minX - padX));
+    const sy = Math.max(0, Math.floor(minY - padY));
+    const sw = Math.min(canvas.width - sx, Math.ceil(maxX - minX + padX * 2));
+    const sh = Math.min(canvas.height - sy, Math.ceil(maxY - minY + padY * 2));
+    const scale = Math.min(1, MAX_IMAGE_EDGE / Math.max(1, sw), MAX_IMAGE_EDGE / Math.max(1, sh));
+
     const snapshot = document.createElement('canvas');
-    snapshot.width = canvas.width;
-    snapshot.height = canvas.height;
+    snapshot.width = Math.max(96, Math.ceil(sw * scale));
+    snapshot.height = Math.max(72, Math.ceil(sh * scale));
     const context = snapshot.getContext('2d');
     if (!context) return undefined;
     context.fillStyle = '#ffffff';
     context.fillRect(0, 0, snapshot.width, snapshot.height);
-    context.filter = 'grayscale(1) contrast(1.35)';
-    context.drawImage(canvas, 0, 0);
+    context.filter = 'grayscale(1) contrast(1.45)';
+    context.drawImage(canvas, sx, sy, sw, sh, 0, 0, snapshot.width, snapshot.height);
     context.filter = 'none';
-    return snapshot.toDataURL('image/png', 0.9);
+    return snapshot.toDataURL('image/jpeg', 0.9);
   } catch (err) {
     console.warn('Could not read canvas pixels:', err);
     return undefined;

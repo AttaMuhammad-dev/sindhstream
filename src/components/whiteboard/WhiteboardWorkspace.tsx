@@ -221,14 +221,12 @@ export const WhiteboardWorkspace: React.FC<WhiteboardWorkspaceProps> = ({
   // destructive/page action every frame. Continuous actions stay in the engine.
   const lastActionKeyRef = useRef('none');
   const lastGestureActionTimeRef = useRef(Number.NEGATIVE_INFINITY);
-  const pendingGestureActionRef = useRef<{ key: string; since: number } | null>(null);
 
   useEffect(() => {
     const gesture = trackingState.gesture;
     const action = handTracker.engine.resolveAction(gesture, settings.gestureBindings);
     if (gesture === 'none') {
       lastActionKeyRef.current = 'none';
-      pendingGestureActionRef.current = null;
       return;
     }
 
@@ -241,72 +239,73 @@ export const WhiteboardWorkspace: React.FC<WhiteboardWorkspaceProps> = ({
       (action === 'zoom' && gesture === 'two_hand_zoom')
     ) {
       lastActionKeyRef.current = 'none';
-      pendingGestureActionRef.current = null;
       return;
     }
 
     const actionKey = `${gesture}:${action}`;
-    const now = performance.now();
-    if (pendingGestureActionRef.current?.key !== actionKey) {
-      pendingGestureActionRef.current = { key: actionKey, since: now };
-      return;
-    }
-    // Discrete gestures need to remain stable across several camera frames,
-    // which prevents a noisy single frame from switching tools or pages.
-    if (now - pendingGestureActionRef.current.since < 100) return;
-    if (actionKey === lastActionKeyRef.current) return;
-    lastActionKeyRef.current = actionKey;
+    if (action === 'none' || actionKey === lastActionKeyRef.current) return;
 
+    // Keep a discrete gesture stable for three camera frames. This must be a
+    // timer: the gesture string often stays identical between frames, so a
+    // frame-count check inside this effect would never reach its threshold.
     const cooldown = settings.gestureBindings?.cooldownMs ?? 350;
-    if (now - lastGestureActionTimeRef.current < cooldown) return;
-    lastGestureActionTimeRef.current = now;
+    const elapsedSinceAction = performance.now() - lastGestureActionTimeRef.current;
+    const actionDelay = Math.max(130, cooldown - elapsedSinceAction);
+    const actionTimer = setTimeout(() => {
+      if (actionKey === lastActionKeyRef.current) return;
+      const now = performance.now();
+      lastGestureActionTimeRef.current = now;
+      lastActionKeyRef.current = actionKey;
 
-    if (action === 'undo') {
-      handleUndo();
-      showGestureFeedback(`Gesture: ${gesture.toUpperCase()} · Undo`);
-    } else if (action === 'redo') {
-      handleRedo();
-      showGestureFeedback(`Gesture: ${gesture.toUpperCase()} · Redo`);
-    } else if (action === 'erase_select') {
-      if (selectedTool === 'eraser') {
-        const restoredTool = lastInkToolRef.current === 'highlighter' ? 'highlighter' : 'pen';
-        setSelectedTool(restoredTool);
-        showGestureFeedback(`V-sign · ${restoredTool === 'highlighter' ? 'Marker' : 'Pen'} selected`);
-      } else {
-        if (selectedTool === 'pen' || selectedTool === 'highlighter') lastInkToolRef.current = selectedTool;
-        setSelectedTool('eraser');
-        showGestureFeedback('V-sign · Eraser selected');
+      if (action === 'undo') {
+        handleUndo();
+        showGestureFeedback(`Gesture: ${gesture.toUpperCase()} · Undo`);
+      } else if (action === 'redo') {
+        handleRedo();
+        showGestureFeedback(`Gesture: ${gesture.toUpperCase()} · Redo`);
+      } else if (action === 'erase_select') {
+        if (selectedTool === 'eraser') {
+          const restoredTool = lastInkToolRef.current === 'highlighter' ? 'highlighter' : 'pen';
+          setSelectedTool(restoredTool);
+          showGestureFeedback(`V-sign · ${restoredTool === 'highlighter' ? 'Marker' : 'Pen'} selected`);
+        } else {
+          if (selectedTool === 'pen' || selectedTool === 'highlighter') lastInkToolRef.current = selectedTool;
+          setSelectedTool('eraser');
+          showGestureFeedback('V-sign · Eraser selected');
+        }
+      } else if (action === 'ai_solve') {
+        setIsAIDrawerOpen(true);
+        showGestureFeedback(`Gesture: ${gesture.toUpperCase()} · AI solver`);
+      } else if (action === 'clear_board') {
+        setIsClearModalOpen(true);
+        showGestureFeedback(`Gesture: ${gesture.toUpperCase()} · Confirm clear`);
+      } else if (action === 'prev_page') {
+        setCurrentPageIndex((prev) => {
+          const next = Math.max(0, prev - 1);
+          showGestureFeedback(`Previous page · ${next + 1} of ${pages.length}`);
+          return next;
+        });
+      } else if (action === 'next_page') {
+        setCurrentPageIndex((prev) => {
+          const next = Math.min(pages.length - 1, prev + 1);
+          showGestureFeedback(`Next page · ${next + 1} of ${pages.length}`);
+          return next;
+        });
+      } else if (action === 'zoom_in' || action === 'zoom') {
+        handleZoomIn();
+        showGestureFeedback(`Gesture: ${gesture.toUpperCase()} · Zoom in`);
+      } else if (action === 'zoom_out') {
+        handleZoomOut();
+        showGestureFeedback(`Gesture: ${gesture.toUpperCase()} · Zoom out`);
+      } else if (action === 'next_color') {
+        const currentIndex = COLOR_PALETTE.findIndex((color) => color.hex.toLowerCase() === selectedColor.toLowerCase());
+        const nextColor = COLOR_PALETTE[(currentIndex + 1 + COLOR_PALETTE.length) % COLOR_PALETTE.length];
+        setSelectedColor(nextColor.hex);
+        showGestureFeedback(`Pinky · ${nextColor.name}`);
       }
-    } else if (action === 'ai_solve') {
-      setIsAIDrawerOpen(true);
-      showGestureFeedback(`Gesture: ${gesture.toUpperCase()} · AI solver`);
-    } else if (action === 'clear_board') {
-      setIsClearModalOpen(true);
-      showGestureFeedback(`Gesture: ${gesture.toUpperCase()} · Confirm clear`);
-    } else if (action === 'prev_page') {
-      setCurrentPageIndex((prev) => {
-        const next = Math.max(0, prev - 1);
-        showGestureFeedback(`Previous page · ${next + 1} of ${pages.length}`);
-        return next;
-      });
-    } else if (action === 'next_page') {
-      setCurrentPageIndex((prev) => {
-        const next = Math.min(pages.length - 1, prev + 1);
-        showGestureFeedback(`Next page · ${next + 1} of ${pages.length}`);
-        return next;
-      });
-    } else if (action === 'zoom_in' || action === 'zoom') {
-      handleZoomIn();
-      showGestureFeedback(`Gesture: ${gesture.toUpperCase()} · Zoom in`);
-    } else if (action === 'zoom_out') {
-      handleZoomOut();
-      showGestureFeedback(`Gesture: ${gesture.toUpperCase()} · Zoom out`);
-    } else if (action === 'next_color') {
-      const currentIndex = COLOR_PALETTE.findIndex((color) => color.hex.toLowerCase() === selectedColor.toLowerCase());
-      const nextColor = COLOR_PALETTE[(currentIndex + 1 + COLOR_PALETTE.length) % COLOR_PALETTE.length];
-      setSelectedColor(nextColor.hex);
-      showGestureFeedback(`Pinky · ${nextColor.name}`);
-    }
+    }, actionDelay);
+
+    return () => clearTimeout(actionTimer);
   }, [
     trackingState.gesture,
     settings.gestureBindings,
@@ -413,14 +412,9 @@ export const WhiteboardWorkspace: React.FC<WhiteboardWorkspaceProps> = ({
         if (!capturedIds.every((id) => activeStrokesRef.current.some((stroke) => stroke.id === id))) return;
 
         const text = result.transcription?.trim();
-        if (!result.success || result.isSimulated || !text) {
-          setSmartInkStatus('AI text conversion needs a working Gemini key. Your ink is safe.');
-          showGestureFeedback('Smart Ink needs the Gemini API key in Vercel');
-          return;
-        }
-        if (result.confidence < 0.88 || result.needsConfirmation) {
-          setSmartInkStatus('Writing was unclear; original ink kept. Use AI Tutor → Convert to Text to review it.');
-          showGestureFeedback('Smart Ink kept your original writing for review');
+        if (!result.success || result.isSimulated || !text || /unable to detect|no readable writing/i.test(text)) {
+          setSmartInkStatus('Gemini could not read clear text from that stroke. Your original ink is safe.');
+          showGestureFeedback('Smart Ink could not read clear text; original ink kept');
           return;
         }
 
@@ -431,7 +425,7 @@ export const WhiteboardWorkspace: React.FC<WhiteboardWorkspaceProps> = ({
         handleCommitStroke({
           id: `smart_text_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
           tool: 'text',
-          color: '#0F172A',
+          color: selectedColor,
           size: fontSize,
           fontSize,
           opacity: 1,
@@ -439,15 +433,26 @@ export const WhiteboardWorkspace: React.FC<WhiteboardWorkspaceProps> = ({
           points: [{ x: Math.max(12, minX), y: baseline }],
           createdAt: Date.now(),
         });
-        setSmartInkStatus('Editable text added · original ink kept');
-        showGestureFeedback('Smart Ink · text recognized');
+        const confidence = Math.round(Math.max(0, Math.min(1, result.confidence)) * 100);
+        const needsReview = result.needsConfirmation || confidence < 88;
+        setSmartInkStatus(needsReview
+          ? `AI text added (${confidence}% confidence) · review it; original ink kept`
+          : 'Editable text added · original ink kept');
+        showGestureFeedback(needsReview ? `Smart Ink · text added for review (${confidence}%)` : 'Smart Ink · text recognized');
       } catch (error) {
         if (cancelled || activePageIdRef.current !== pageId) return;
         const message = error instanceof Error ? error.message : 'AI handwriting recognition failed.';
-        const usefulMessage = message.replace(/^Server responded with status \d+$/i, 'The AI server returned an error.').slice(0, 140);
+        const statusCode = message.match(/\b(401|403|404|413|429|500|502|503|504)\b/)?.[1];
+        const usefulMessage = message.slice(0, 180);
         setSmartInkStatus(message.includes('GEMINI_API_KEY')
           ? 'Gemini key is missing on this deployment. Redeploy after adding GEMINI_API_KEY.'
-          : `Gemini error: ${usefulMessage} Original ink is safe.`);
+          : statusCode === '413'
+          ? 'Gemini request image was too large. Original ink is safe.'
+          : statusCode === '401' || statusCode === '403'
+          ? 'Gemini rejected the API key or its permissions. Check the key in Vercel.'
+          : statusCode === '429'
+          ? 'Gemini quota or rate limit reached. Wait briefly and try again.'
+          : `Gemini error: ${usefulMessage}. Original ink is safe.`);
         showGestureFeedback('Smart Ink could not read this phrase; original ink kept');
       }
     }, 1800);
@@ -464,6 +469,7 @@ export const WhiteboardWorkspace: React.FC<WhiteboardWorkspaceProps> = ({
     project.subject,
     settings.smartHandwriting,
     showGestureFeedback,
+    selectedColor,
     trackingState.interactionState,
     trackingState.isPenDown,
   ]);
@@ -864,7 +870,8 @@ export const WhiteboardWorkspace: React.FC<WhiteboardWorkspaceProps> = ({
                       ? 'bg-cyan-950/80 text-cyan-300 border border-cyan-700/80'
                       : 'text-slate-500 hover:text-slate-300'
                   }`}
-                  title="Auto-snap freehand lines, circles, rectangles, triangles, pentagons and hexagons"
+                  title="Auto-fit freehand lines, circles, ellipses, triangles, rectangles, diamonds, parallelograms, trapezoids, pentagons, hexagons and stars"
+                  aria-pressed={autoShapeRecognition}
                 >
                   <Wand2 className="w-3 h-3 text-cyan-400" />
                   <span className="text-[9px]">Shapes</span>

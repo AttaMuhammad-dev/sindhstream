@@ -171,6 +171,14 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
 
     ctx.clearRect(0, 0, width, height);
 
+    const activeEraser = currentStrokeRef.current?.tool === 'eraser';
+    const baseCanvas = baseCanvasRef.current;
+    if (baseCanvas) baseCanvas.style.visibility = activeEraser ? 'hidden' : 'visible';
+    // The base and overlay canvases are separate layers. Copy the completed
+    // board into the overlay while erasing so destination-out visibly removes
+    // ink during the drag instead of waiting until the stroke is committed.
+    if (activeEraser && baseCanvas) ctx.drawImage(baseCanvas, 0, 0, width, height);
+
     ctx.save();
     ctx.translate(pan.x, pan.y);
     ctx.scale(zoom, zoom);
@@ -186,7 +194,7 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
         ctx.lineWidth = 2 / zoom;
         ctx.setLineDash([4 / zoom, 3 / zoom]);
         ctx.beginPath();
-        ctx.arc(latestPoint.x, latestPoint.y, Math.max(8, brushSize * 2), 0, Math.PI * 2);
+        ctx.arc(latestPoint.x, latestPoint.y, Math.max(10, brushSize * 3), 0, Math.PI * 2);
         ctx.stroke();
         ctx.restore();
       }
@@ -271,10 +279,21 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
     onUpdateTransform({ x: newPanX, y: newPanY }, newZoom);
   };
 
+  const finalizeStroke = useCallback((stroke: DrawingStroke) => {
+    let finished = stroke;
+    if (autoShapeRecognition && finished.tool === 'pen' && finished.points.length >= 4) {
+      const recognized = recognizeShape(finished);
+      if (recognized) finished = { ...finished, tool: recognized.shape, points: recognized.fittedPoints };
+    }
+    onCommitStroke(finished);
+  }, [autoShapeRecognition, onCommitStroke]);
+
   // Pointer Down
   const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    e.preventDefault();
     const canvas = overlayCanvasRef.current;
     if (!canvas) return;
+    try { canvas.setPointerCapture(e.pointerId); } catch { /* Browser may already own this pointer. */ }
     const rect = canvas.getBoundingClientRect();
     const screenX = e.clientX - rect.left;
     const screenY = e.clientY - rect.top;
@@ -399,12 +418,19 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
         { x: worldPt.x, y: worldPt.y, pressure: e.pressure || 1, time: performance.now() },
       ];
     } else {
-      currentStrokeRef.current.points.push({
-        x: worldPt.x,
-        y: worldPt.y,
-        pressure: e.pressure || 1,
-        time: performance.now(),
-      });
+      const points = currentStrokeRef.current.points;
+      const previous = points[points.length - 1];
+      const distance = Math.hypot(worldPt.x - previous.x, worldPt.y - previous.y);
+      const steps = Math.min(96, Math.max(1, Math.ceil(distance / 5)));
+      for (let step = 1; step <= steps; step++) {
+        const t = step / steps;
+        points.push({
+          x: previous.x + (worldPt.x - previous.x) * t,
+          y: previous.y + (worldPt.y - previous.y) * t,
+          pressure: e.pressure || 1,
+          time: performance.now(),
+        });
+      }
     }
 
     renderOverlay();
@@ -419,22 +445,9 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
 
     if (!currentStrokeRef.current) return;
 
-    let finalStroke = currentStrokeRef.current;
-
-    // Freehand geometric shape recognition if enabled and tool is pen
-    if (autoShapeRecognition && finalStroke.tool === 'pen' && finalStroke.points.length >= 6) {
-      const recognized = recognizeShape(finalStroke);
-      if (recognized) {
-        finalStroke = {
-          ...finalStroke,
-          tool: recognized.shape,
-          points: recognized.fittedPoints,
-        };
-      }
-    }
-
+    const finalStroke = currentStrokeRef.current;
     if (finalStroke.points.length > 0) {
-      onCommitStroke(finalStroke);
+      finalizeStroke(finalStroke);
     }
     currentStrokeRef.current = null;
     renderOverlay();
@@ -447,7 +460,7 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
     if (!screenPoint) {
       previousGesturePanPointRef.current = null;
       if (currentStrokeRef.current) {
-        onCommitStroke(currentStrokeRef.current);
+        finalizeStroke(currentStrokeRef.current);
         currentStrokeRef.current = null;
         renderOverlay();
       }
@@ -456,7 +469,7 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
 
     if (trackingState.isPanning) {
       if (currentStrokeRef.current) {
-        onCommitStroke(currentStrokeRef.current);
+        finalizeStroke(currentStrokeRef.current);
         currentStrokeRef.current = null;
         renderOverlay();
       }
@@ -529,19 +542,9 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
     } else {
       // Pen Up: finalize active stroke safely
       if (currentStrokeRef.current) {
-        let finalStroke = currentStrokeRef.current;
-        if (autoShapeRecognition && finalStroke.tool === 'pen' && finalStroke.points.length >= 6) {
-          const recognized = recognizeShape(finalStroke);
-          if (recognized) {
-            finalStroke = {
-              ...finalStroke,
-              tool: recognized.shape,
-              points: recognized.fittedPoints,
-            };
-          }
-        }
+        const finalStroke = currentStrokeRef.current;
         if (finalStroke.points.length > 0) {
-          onCommitStroke(finalStroke);
+          finalizeStroke(finalStroke);
         }
         currentStrokeRef.current = null;
         renderOverlay();
@@ -563,6 +566,7 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
     onUpdateTransform,
     autoShapeRecognition,
     onCommitStroke,
+    finalizeStroke,
     renderOverlay,
   ]);
 

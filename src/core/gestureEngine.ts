@@ -174,7 +174,8 @@ export class GestureEngine {
 
     // Isolated pinky-up is an intentional, distinct command. Requiring every
     // other digit to be curled avoids cycling color while making a fist/V-sign.
-    if (pinkyExt && !indexExt && !middleExt && !ringExt && !thumbExt) {
+    const thumbRestingOnPalm = calculateDistance(thumbTip, indexMcp) < handScale * 1.05;
+    if (pinkyExt && !indexExt && !middleExt && !ringExt && (!thumbExt || thumbRestingOnPalm)) {
       return { gesture: 'pinky_up', pinchDistance, isPinching: false };
     }
 
@@ -365,9 +366,9 @@ export class GestureEngine {
         const dist = Math.hypot(dX, dY);
         const maxStep = 8; // Max distance between adjacent points in pixels for ultra-smooth curves
 
-        if (dist > maxStep && dist < 350) {
+        if (dist > maxStep && dist < 900) {
           // Linear subdivision between previous and current smoothed point
-          const steps = Math.floor(dist / maxStep);
+          const steps = Math.min(120, Math.ceil(dist / maxStep));
           for (let i = 1; i < steps; i++) {
             const t = i / steps;
             interpolatedPoints.push({

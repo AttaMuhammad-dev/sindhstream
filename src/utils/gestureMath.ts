@@ -201,7 +201,8 @@ export function classifyHandGesture(
     return 'v_sign';
   }
 
-  if (pinkyExt && !indexExt && !middleExt && !ringExt && !thumbExt) {
+  const thumbRestingOnPalm = calculateDistance3D(thumbTip, indexMcp) < handScale * 1.05;
+  if (pinkyExt && !indexExt && !middleExt && !ringExt && (!thumbExt || thumbRestingOnPalm)) {
     return 'pinky_up';
   }
 

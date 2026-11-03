@@ -22,14 +22,43 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
+function publicGeminiError(error: unknown): { status: number; message: string } {
+  const value = error as { status?: number | string; statusCode?: number | string; message?: string };
+  const rawMessage = String(value?.message || 'Unknown Gemini API error');
+  const statusInMessage = rawMessage.match(/\b(400|401|403|404|408|413|429|500|502|503|504)\b/);
+  const upstreamStatus = Number(value?.status || value?.statusCode || statusInMessage?.[1] || 0);
+  const safeDetail = rawMessage
+    .replace(/AIza[0-9A-Za-z_-]{20,}/g, '[redacted API key]')
+    .replace(/\s+/g, ' ')
+    .slice(0, 240);
+
+  if (upstreamStatus === 401 || upstreamStatus === 403 || /unauthenticated|permission_denied|api key/i.test(rawMessage)) {
+    return { status: 502, message: 'Gemini rejected the API key or its permissions. Confirm GEMINI_API_KEY is a valid Gemini Developer API key with Generative Language API access.' };
+  }
+  if (upstreamStatus === 429 || /resource_exhausted|quota/i.test(rawMessage)) {
+    return { status: 503, message: 'Gemini quota or rate limit reached. Wait briefly, then try again.' };
+  }
+  if (upstreamStatus === 404 || /model.*not found|not supported for generatecontent/i.test(rawMessage)) {
+    return { status: 502, message: `Gemini model or endpoint was not found. Check model access. ${safeDetail}` };
+  }
+  if (upstreamStatus === 413) {
+    return { status: 413, message: 'The handwriting image exceeded the server request limit. The client should crop and compress it before retrying.' };
+  }
+  return {
+    status: 502,
+    message: `Gemini request failed${upstreamStatus ? ` (HTTP ${upstreamStatus})` : ''}: ${safeDetail}`,
+  };
+}
+
 app.use(express.json({ limit: '50mb' }));
 
 // Health check endpoint
 app.get('/api/health', (_req, res) => {
+  const configuredKey = process.env.GEMINI_API_KEY?.trim().replace(/^(["'])(.*)\1$/, '$2');
   res.json({
     status: 'ok',
     service: 'GestEra Server',
-    geminiConfigured: Boolean(process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY !== 'MY_GEMINI_API_KEY'),
+    geminiConfigured: Boolean(configuredKey && configuredKey !== 'MY_GEMINI_API_KEY'),
     timestamp: new Date().toISOString(),
   });
 });
@@ -43,9 +72,10 @@ app.post('/api/ai/handwriting', async (req, res) => {
     res.json(result);
   } catch (err: any) {
     console.error('Handwriting OCR error:', err);
-    res.status(500).json({
+    const failure = publicGeminiError(err);
+    res.status(failure.status).json({
       success: false,
-      error: err.message || 'Failed to process handwriting recognition',
+      error: failure.message,
     });
   }
 });

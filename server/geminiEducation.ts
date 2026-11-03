@@ -13,8 +13,8 @@ import type {
 } from '../src/types/ai';
 
 export function getGeminiClient(): GoogleGenAI | null {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey || apiKey === 'MY_GEMINI_API_KEY' || apiKey.trim() === '') {
+  const apiKey = process.env.GEMINI_API_KEY?.trim().replace(/^(["'])(.*)\1$/, '$2');
+  if (!apiKey || apiKey === 'MY_GEMINI_API_KEY') {
     return null;
   }
   return new GoogleGenAI({
@@ -31,10 +31,11 @@ export function getGeminiClient(): GoogleGenAI | null {
  * Format image part for Gemini multimodal contents
  */
 function prepareImagePart(imageBase64: string) {
-  const cleanBase64 = imageBase64.replace(/^data:image\/\w+;base64,/, '');
+  const dataUrlMatch = imageBase64.match(/^data:(image\/(?:png|jpeg|webp));base64,/i);
+  const cleanBase64 = imageBase64.replace(/^data:image\/[a-z0-9.+-]+;base64,/i, '');
   return {
     inlineData: {
-      mimeType: 'image/png',
+      mimeType: dataUrlMatch?.[1]?.toLowerCase() || 'image/png',
       data: cleanBase64,
     },
   };
@@ -94,7 +95,7 @@ CRITICAL RULES:
 3. For each ambiguity, provide the alternatives list, the best guess, and context.
 4. Ignore grid lines, tool UI, and unrelated marks. Never invent missing letters or symbols. Calculate confidence from visual clarity.
 5. If confidence is below 0.88 or ambiguities exist, set "needsConfirmation": true.
-Return strict JSON with this exact schema:
+Return only a strict JSON object matching this exact schema. Never return plain text or Markdown outside the JSON object:
 {
   "transcription": "string",
   "confidence": 0.95,
@@ -116,7 +117,7 @@ Return strict JSON with this exact schema:
 
   const contents: any[] = [prepareImagePart(imageBase64)];
   contents.push({
-    text: `Read the latest handwritten phrase in this cropped whiteboard image. Subject context: ${contextSubject}. Return exact words or LaTeX only; do not solve, paraphrase, or add examples. If no readable writing is present, return an empty transcription with low confidence.`,
+    text: `Read the latest handwritten phrase in this cropped whiteboard image. Subject context: ${contextSubject}. Follow the JSON schema in the system instructions. Put only the exact recognized words or LaTeX in the transcription field; do not solve, paraphrase, or add examples. If no readable writing is present, use an empty transcription and low confidence.`,
   });
 
   const response = await ai.models.generateContent({
@@ -133,7 +134,7 @@ Return strict JSON with this exact schema:
   const parsed = safeJsonParse<any>(response.text || '{}', {});
   return {
     success: true,
-    transcription: parsed.transcription || 'Unable to detect legible strokes',
+    transcription: typeof parsed.transcription === 'string' ? parsed.transcription : '',
     confidence: typeof parsed.confidence === 'number' ? Math.min(1, Math.max(0, parsed.confidence)) : 0.85,
     isMath: Boolean(parsed.isMath),
     detectedSubject: parsed.detectedSubject || contextSubject,

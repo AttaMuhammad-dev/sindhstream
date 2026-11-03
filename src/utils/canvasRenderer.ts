@@ -155,7 +155,7 @@ export function drawStrokeOnCanvas(
   if (tool === 'eraser') {
     ctx.globalCompositeOperation = 'destination-out';
     ctx.strokeStyle = 'rgba(0,0,0,1)';
-    ctx.lineWidth = size * 4;
+    ctx.lineWidth = Math.max(16, size * 6);
   } else if (tool === 'highlighter') {
     ctx.globalCompositeOperation = 'source-over';
     ctx.strokeStyle = color;
@@ -196,7 +196,7 @@ export function drawStrokeOnCanvas(
   } else if (tool === 'circle' && points.length >= 2) {
     const start = points[0];
     const end = points[points.length - 1];
-    const radius = Math.hypot(end.x - start.x, end.y - start.y) / 2;
+    const radius = Math.min(Math.abs(end.x - start.x), Math.abs(end.y - start.y)) / 2;
     const centerX = (start.x + end.x) / 2;
     const centerY = (start.y + end.y) / 2;
     ctx.beginPath();
