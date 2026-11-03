@@ -45,6 +45,7 @@ export const DEFAULT_SETTINGS: UserSettings = {
     swipeLeftAction: 'prev_page',
     swipeRightAction: 'next_page',
     twoHandZoomAction: 'zoom',
+    pinkyAction: 'next_color',
     pinchTriggerMode: 'thumb_index',
     hysteresisRatio: 1.35,
     swipeVelocityThreshold: 0.8,

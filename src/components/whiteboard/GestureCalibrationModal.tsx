@@ -60,6 +60,13 @@ const GESTURE_GUIDES = [
     instruction: 'Raise both hands in camera view. Move hands apart to zoom in; bring hands together to zoom out.',
     shortcutBadge: '2 Hands Spread/Pinch',
   },
+  {
+    id: 'pinky_up',
+    title: 'Pinky Up (Next Pen Color)',
+    gestureKey: 'pinky_up',
+    instruction: 'Raise only your pinky, keeping the other fingers curled, to cycle through pen colors.',
+    shortcutBadge: 'Pinky only',
+  },
 ];
 
 export const GestureCalibrationModal: React.FC<GestureCalibrationModalProps> = ({
@@ -203,6 +210,11 @@ export const GestureCalibrationModal: React.FC<GestureCalibrationModalProps> = (
               <p className="text-[10px] text-slate-500 mt-1">Higher = zero lag when moving quickly.</p>
             </div>
           </div>
+          <div className="mt-4 rounded-lg border border-slate-800 bg-slate-950/60 p-3">
+            <div className="flex justify-between text-xs text-slate-300"><span>Two-hand zoom speed</span><span className="font-mono text-cyan-300">{(settings.gestureBindings.twoHandZoomSensitivity ?? 0.008).toFixed(3)}</span></div>
+            <input aria-label="Two-hand zoom sensitivity" type="range" min="0.003" max="0.02" step="0.001" value={settings.gestureBindings.twoHandZoomSensitivity ?? 0.008} onChange={(e) => onUpdateSettings({ ...settings, gestureBindings: { ...settings.gestureBindings, twoHandZoomSensitivity: Number(e.target.value) } })} className="mt-2 w-full accent-cyan-400" />
+            <p className="text-[10px] text-slate-500">Adjust how quickly moving both hands apart zooms the board.</p>
+          </div>
         </div>
 
         {/* Configurable Gesture Bindings Section */}
@@ -212,6 +224,12 @@ export const GestureCalibrationModal: React.FC<GestureCalibrationModalProps> = (
             Configurable Gesture Bindings
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+            <div className="flex items-center justify-between p-2.5 rounded-lg bg-slate-950/60 border border-slate-800">
+              <span className="text-slate-300 font-medium">Pinky Up</span>
+              <select value={settings.gestureBindings.pinkyAction ?? 'next_color'} onChange={(e) => handleUpdateBinding('pinkyAction', e.target.value as GestureAction)} className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-cyan-300 text-xs">
+                <option value="next_color">Next pen color</option><option value="zoom_in">Zoom in</option><option value="zoom_out">Zoom out</option><option value="undo">Undo</option><option value="redo">Redo</option><option value="ai_solve">Open AI tools</option><option value="none">No action</option>
+              </select>
+            </div>
             <div className="flex items-center justify-between p-2.5 rounded-lg bg-slate-950/60 border border-slate-800">
               <span className="text-slate-300 font-medium">Open Palm</span>
               <select

@@ -201,6 +201,10 @@ export function classifyHandGesture(
     return 'v_sign';
   }
 
+  if (pinkyExt && !indexExt && !middleExt && !ringExt && !thumbExt) {
+    return 'pinky_up';
+  }
+
   // 4. Thumbs Up: Thumb extended upward, other 4 fingers curled
   if (thumbExt && thumbTip.y < wrist.y - 0.08 && !indexExt && !middleExt && !ringExt && !pinkyExt) {
     return 'thumbs_up';

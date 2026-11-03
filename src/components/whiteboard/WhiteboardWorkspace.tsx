@@ -301,6 +301,11 @@ export const WhiteboardWorkspace: React.FC<WhiteboardWorkspaceProps> = ({
     } else if (action === 'zoom_out') {
       handleZoomOut();
       showGestureFeedback(`Gesture: ${gesture.toUpperCase()} · Zoom out`);
+    } else if (action === 'next_color') {
+      const currentIndex = COLOR_PALETTE.findIndex((color) => color.hex.toLowerCase() === selectedColor.toLowerCase());
+      const nextColor = COLOR_PALETTE[(currentIndex + 1 + COLOR_PALETTE.length) % COLOR_PALETTE.length];
+      setSelectedColor(nextColor.hex);
+      showGestureFeedback(`Pinky · ${nextColor.name}`);
     }
   }, [
     trackingState.gesture,
@@ -312,6 +317,7 @@ export const WhiteboardWorkspace: React.FC<WhiteboardWorkspaceProps> = ({
     handleZoomOut,
     showGestureFeedback,
     selectedTool,
+    selectedColor,
   ]);
 
   // Two-hand zoom is a continuous action; scale in proportion to frame-to-frame
@@ -320,8 +326,10 @@ export const WhiteboardWorkspace: React.FC<WhiteboardWorkspaceProps> = ({
   useEffect(() => {
     const delta = trackingState.zoomScaleDelta ?? 0;
     if (trackingState.gesture !== 'two_hand_zoom' || twoHandAction !== 'zoom' || delta === 0) return;
-    applyZoomFactor(Math.exp(delta * 3));
-  }, [trackingState.gesture, trackingState.zoomScaleDelta, twoHandAction, applyZoomFactor]);
+    const sensitivity = settings.gestureBindings?.twoHandZoomSensitivity ?? 0.008;
+    const boundedDelta = Math.max(-0.06, Math.min(0.06, delta));
+    applyZoomFactor(Math.exp(boundedDelta * 2.4 * sensitivity / 0.008));
+  }, [trackingState.gesture, trackingState.zoomScaleDelta, twoHandAction, settings.gestureBindings?.twoHandZoomSensitivity, applyZoomFactor]);
 
   // Stroke commit helper
   const handleCommitStroke = useCallback(

@@ -92,7 +92,8 @@ export type HandGesture =
   | 'closed_fist'     // Closed fist -> Presentation laser / clear hold
   | 'swipe_left'      // Quick leftward flick -> Previous page / undo
   | 'swipe_right'     // Quick rightward flick -> Next page / redo
-  | 'two_hand_zoom';  // Two hands distance delta -> Zoom canvas
+  | 'two_hand_zoom'  // Two hands distance delta -> Zoom canvas
+  | 'pinky_up';      // Pinky alone extended -> cycle pen color
 
 export type GestureAction = 
   | 'draw' 
@@ -110,6 +111,7 @@ export type GestureAction =
   | 'zoom_out'
   | 'ai_solve'
   | 'pan'
+  | 'next_color'
   | 'none';
 
 export interface GestureBindingConfig {
@@ -122,6 +124,7 @@ export interface GestureBindingConfig {
   swipeLeftAction: GestureAction;
   swipeRightAction: GestureAction;
   twoHandZoomAction: GestureAction;
+  pinkyAction?: GestureAction;
   pinchTriggerMode: 'thumb_index' | 'thumb_middle' | 'index_hold';
   hysteresisRatio: number; // multiplier for pen release (e.g. 1.35)
   swipeVelocityThreshold: number; // normalized units per second

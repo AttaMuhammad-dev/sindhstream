@@ -172,6 +172,12 @@ export class GestureEngine {
       this.recentXPositions = [];
     }
 
+    // Isolated pinky-up is an intentional, distinct command. Requiring every
+    // other digit to be curled avoids cycling color while making a fist/V-sign.
+    if (pinkyExt && !indexExt && !middleExt && !ringExt && !thumbExt) {
+      return { gesture: 'pinky_up', pinchDistance, isPinching: false };
+    }
+
     const cooldown = settings.gestureBindings?.cooldownMs ?? 350;
     const canTriggerSwipe = currentTime - this.lastGestureTimestamp > cooldown;
 
@@ -423,6 +429,8 @@ export class GestureEngine {
           return 'next_page';
         case 'two_hand_zoom':
           return 'zoom';
+        case 'pinky_up':
+          return 'next_color';
         case 'pointing':
           return 'laser_presentation';
         default:
@@ -449,6 +457,8 @@ export class GestureEngine {
         return bindings.swipeRightAction;
       case 'two_hand_zoom':
         return bindings.twoHandZoomAction;
+      case 'pinky_up':
+        return bindings.pinkyAction || 'next_color';
       case 'pointing':
       default:
         return bindings.pointingAction;
